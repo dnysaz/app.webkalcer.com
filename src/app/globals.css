@@ -1,0 +1,96 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+  /* Theme colors — overridden at runtime from saved settings */
+  --crm-primary: #234b42;
+  --crm-dark: #173b35;
+  --crm-darker: #254b43;
+  --crm-active: #2b574d;
+  --crm-accent: #c9e979;
+  --crm-soft: #d7e9d7;
+  --crm-mid: #477f67;
+  --crm-text: #2b604e;
+  --crm-card: #214a41;
+  --crm-card-border: #3a665a;
+  --crm-card-track: #386257;
+
+  /* Derived neutrals — follow the chosen theme automatically */
+  --crm-bg: color-mix(in srgb, var(--crm-primary) 5%, #ffffff);
+  --crm-panel: color-mix(in srgb, var(--crm-primary) 3%, #ffffff);
+  --crm-surface: color-mix(in srgb, var(--crm-primary) 4%, #ffffff);
+  --crm-hover: color-mix(in srgb, var(--crm-primary) 8%, #ffffff);
+  --crm-border: color-mix(in srgb, var(--crm-primary) 12%, #ffffff);
+  --crm-border-soft: color-mix(in srgb, var(--crm-primary) 8%, #ffffff);
+  --crm-border-input: color-mix(in srgb, var(--crm-primary) 13%, #ffffff);
+  --crm-focus-ring: color-mix(in srgb, var(--crm-primary) 14%, #ffffff);
+  --crm-focus-border: color-mix(in srgb, var(--crm-primary) 55%, #ffffff);
+  /* Text colors are fixed neutral (black/gray/white) — they do NOT follow the
+     theme. Changing the theme only shifts the accents (buttons, sidebar,
+     badges, header band), never the typography. */
+  --crm-fg: #1c2220;
+  --crm-body: #4b5550;
+  --crm-secondary: #66706c;
+  --crm-muted: #828b87;
+  --crm-label: #919a96;
+  --crm-faint: #a4aca8;
+  --crm-placeholder: #b0b7b4;
+  --crm-brand: color-mix(in srgb, var(--crm-primary) 70%, #8fa89c);
+
+  /* Semantic colors — backgrounds follow the theme, text stays neutral */
+  --crm-avatar-bg: color-mix(in srgb, var(--crm-primary) 14%, #ffffff);
+  --crm-avatar-text: #3a4541;
+
+  --crm-danger: color-mix(in srgb, var(--crm-primary) 55%, #b04848);
+  --crm-danger-hover: color-mix(in srgb, var(--crm-primary) 62%, #8f3636);
+  --crm-danger-bg: color-mix(in srgb, var(--crm-primary) 12%, #fbecec);
+  --crm-danger-border: color-mix(in srgb, var(--crm-primary) 22%, #e5b8b8);
+
+  --crm-st-draft-bg: color-mix(in srgb, var(--crm-primary) 9%, #ffffff);
+  --crm-st-draft-text: #4d5753;
+  --crm-st-active-bg: color-mix(in srgb, var(--crm-primary) 14%, #ffffff);
+  --crm-st-active-text: #38433f;
+  --crm-st-process-bg: color-mix(in srgb, var(--crm-accent) 35%, #ffffff);
+  --crm-st-process-text: #555d55;
+  --crm-st-done-bg: color-mix(in srgb, var(--crm-primary) 20%, #ffffff);
+  --crm-st-done-text: #2f4a3a;
+  --crm-st-cancel-bg: color-mix(in srgb, var(--crm-primary) 12%, #f6e2e2);
+  --crm-st-cancel-text: #8a3a3a;
+
+  /* Chart bars (dashboard) */
+  --crm-chart-committed: color-mix(in srgb, var(--crm-primary) 55%, #ffffff);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+@keyframes crm-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes crm-slide-in {
+  from { opacity: 0; transform: translateX(48px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.crm-fade-in { animation: crm-fade-in 0.25s ease both; }
+.crm-slide-in { animation: crm-slide-in 0.3s cubic-bezier(0.2, 0.75, 0.25, 1) both; }
