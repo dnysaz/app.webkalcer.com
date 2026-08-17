@@ -10,16 +10,25 @@ import type { FontSizeKey, ThemeKey } from "@/lib/settings";
 type SettingsRow = { site_name: string; theme: string; font_size: string; gemini_api_key: string };
 
 export async function GET() {
-  await setupDatabase();
-  const rows = await query<SettingsRow>`SELECT site_name, theme, font_size, gemini_api_key FROM settings WHERE id = ${SETTINGS_ROW_ID} LIMIT 1`;
-  const row = rows[0];
-  return NextResponse.json({
-    siteName: row?.site_name ?? DEFAULT_SETTINGS.siteName,
-    theme: row?.theme && THEMES[row.theme as ThemeKey] ? (row.theme as ThemeKey) : DEFAULT_SETTINGS.theme,
-    fontSize: row?.font_size && FONT_SIZES[row.font_size as FontSizeKey] ? (row.font_size as FontSizeKey) : DEFAULT_SETTINGS.fontSize,
-    // Never send the raw key to the browser — only whether one is configured.
-    hasGeminiKey: !!row?.gemini_api_key,
-  });
+  try {
+    const rows = await query<SettingsRow>`SELECT site_name, theme, font_size, gemini_api_key FROM settings WHERE id = ${SETTINGS_ROW_ID} LIMIT 1`;
+    const row = rows[0];
+    return NextResponse.json({
+      siteName: row?.site_name ?? DEFAULT_SETTINGS.siteName,
+      theme: row?.theme && THEMES[row.theme as ThemeKey] ? (row.theme as ThemeKey) : DEFAULT_SETTINGS.theme,
+      fontSize: row?.font_size && FONT_SIZES[row.font_size as FontSizeKey] ? (row.font_size as FontSizeKey) : DEFAULT_SETTINGS.fontSize,
+      // Never send the raw key to the browser — only whether one is configured.
+      hasGeminiKey: !!row?.gemini_api_key,
+    });
+  } catch (error) {
+    // Table may not exist yet on a brand-new DB (schema is created by
+    // /api/setup when the app first loads). Return defaults instead of
+    // running the full ~30-statement migration on every page view.
+    if ((error as { code?: string })?.code === "42P01") {
+      return NextResponse.json(DEFAULT_SETTINGS);
+    }
+    throw error;
+  }
 }
 
 export async function PATCH(request: Request) {

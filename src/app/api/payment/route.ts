@@ -11,9 +11,18 @@ const ROW_ID = "site";
 
 export async function GET() {
   if (!(await requireAuth())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  await setupDatabase();
-  const rows = await query<PaymentSettingsRow>`SELECT id, qris_image, bank_accounts FROM payment_settings WHERE id = ${ROW_ID} LIMIT 1`;
-  return NextResponse.json(rowToPaymentSettings(rows[0]));
+  try {
+    const rows = await query<PaymentSettingsRow>`SELECT id, qris_image, bank_accounts FROM payment_settings WHERE id = ${ROW_ID} LIMIT 1`;
+    return NextResponse.json(rows[0] ? rowToPaymentSettings(rows[0]) : { qrisImage: "", bankAccounts: [] });
+  } catch (error) {
+    // Table may not exist yet on a brand-new DB (schema is created by
+    // /api/setup when the app first loads). Return defaults instead of
+    // running the full ~30-statement migration on every page view.
+    if ((error as { code?: string })?.code === "42P01") {
+      return NextResponse.json({ qrisImage: "", bankAccounts: [] });
+    }
+    throw error;
+  }
 }
 
 export async function PUT(request: Request) {
