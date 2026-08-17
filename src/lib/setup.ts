@@ -17,7 +17,7 @@ const codeFromDate = (createdAt: string) => {
 
 const yearOf = (dateStr: string) => String(new Date(dateStr).getFullYear());
 
-export async function setupDatabase() {
+async function runSetupDatabase() {
   const sql = getSql();
 
   await sql`CREATE TABLE IF NOT EXISTS customers (
@@ -547,4 +547,30 @@ export async function setupDatabase() {
       (SELECT count(*)::int FROM products) AS products,
       (SELECT count(*)::int FROM web_assets) AS webAssets`;
   return after[0];
+}
+
+export interface DbCounts {
+  customers: number;
+  invoices: number;
+  quotes: number;
+  products: number;
+  webAssets: number;
+}
+
+let setupPromise: Promise<DbCounts> | null = null;
+
+/**
+ * Ensures the schema + seed data are set up, running the migration at most once
+ * per serverless instance. Subsequent calls resolve instantly so API routes
+ * (e.g. /api/payment) don't re-run ~30 queries on every request.
+ * If setup fails, the cache is cleared so the next call retries.
+ */
+export function setupDatabase(): Promise<DbCounts> {
+  if (!setupPromise) {
+    setupPromise = runSetupDatabase().catch((error) => {
+      setupPromise = null;
+      throw error;
+    });
+  }
+  return setupPromise;
 }
