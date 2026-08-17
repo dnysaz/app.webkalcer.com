@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, FileUp, Phone, Search, UploadCloud, X } from "lucide-react";
+import { Check, FileUp, Pencil, Phone, Search, Trash2, UploadCloud, X } from "lucide-react";
 import { CrmShell } from "@/components/CrmShell";
 import { ConfirmModal } from "@/components/crm/ConfirmModal";
 import type { Contact, ContactStatus } from "@/lib/crm";
@@ -24,6 +24,9 @@ export function ContactBookView() {
   const [filter, setFilter] = useState<"all" | ContactStatus>("all");
   const [page, setPage] = useState(1);
   const [confirmDelete, setConfirmDelete] = useState<Contact | null>(null);
+  const [editing, setEditing] = useState<Contact | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -108,6 +111,37 @@ export function ContactBookView() {
     setConfirmDelete(null);
   }
 
+  function openEdit(contact: Contact) {
+    setEditing(contact);
+    setEditName(contact.name);
+    setEditPhone(contact.phone);
+  }
+
+  async function saveEdit() {
+    if (!editing) return;
+    const name = editName.trim();
+    const phone = editPhone.trim();
+    if (!name || !phone) {
+      announce("Name and phone are required");
+      return;
+    }
+    const prev = contacts;
+    setContacts((all) => all.map((c) => (c.id === editing.id ? { ...c, name, phone } : c)));
+    try {
+      const res = await fetch("/api/contacts", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: editing.id, name, phone }),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      announce("Contact updated");
+      setEditing(null);
+    } catch {
+      setContacts(prev);
+      announce("Failed to update contact");
+    }
+  }
+
   const query = search.trim().toLowerCase();
   const visible = contacts.filter((c) => {
     if (filter !== "all" && c.status !== filter) return false;
@@ -185,6 +219,7 @@ export function ContactBookView() {
                   <th className="px-4 py-4">Phone</th>
                   <th className="px-4 py-4">Imported</th>
                   <th className="px-6 py-4 text-right">Status</th>
+                  <th className="px-4 py-4 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -201,6 +236,12 @@ export function ContactBookView() {
                     <td className="px-6 py-3.5">
                       <StatusChecks contact={contact} onStatus={(s) => void setStatus(contact, s)} />
                     </td>
+                    <td className="px-4 py-3.5">
+                      <div className="flex items-center justify-end gap-1">
+                        <button onClick={() => openEdit(contact)} className="rounded-lg p-2 text-(--crm-muted) transition-colors hover:bg-(--crm-soft) hover:text-(--crm-text)" title="Edit contact" aria-label="Edit contact"><Pencil size={14} /></button>
+                        <button onClick={() => setConfirmDelete(contact)} className="rounded-lg p-2 text-(--crm-muted) transition-colors hover:bg-(--crm-danger-bg) hover:text-(--crm-danger)" title="Delete contact" aria-label="Delete contact"><Trash2 size={14} /></button>
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -214,7 +255,10 @@ export function ContactBookView() {
                   <p className="truncate text-sm font-semibold">{contact.name}</p>
                   <p className="mt-0.5 font-mono text-[11px] text-(--crm-muted)">{contact.phone}</p>
                 </div>
-                <StatusChecks contact={contact} onStatus={(s) => void setStatus(contact, s)} />
+                <div className="flex shrink-0 items-center gap-0.5">
+                  <button onClick={() => openEdit(contact)} className="rounded-lg p-2 text-(--crm-muted) transition-colors hover:bg-(--crm-soft) hover:text-(--crm-text)" title="Edit contact" aria-label="Edit contact"><Pencil size={14} /></button>
+                  <button onClick={() => setConfirmDelete(contact)} className="rounded-lg p-2 text-(--crm-muted) transition-colors hover:bg-(--crm-danger-bg) hover:text-(--crm-danger)" title="Delete contact" aria-label="Delete contact"><Trash2 size={14} /></button>
+                </div>
               </div>
             ))}
           </div>
@@ -252,6 +296,30 @@ export function ContactBookView() {
           onClose={() => setConfirmDelete(null)}
           onConfirm={() => void deleteContact(confirmDelete)}
         />
+      )}
+      {editing && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div className="crm-fade-in absolute inset-0 bg-(--crm-dark)/40 backdrop-blur-[2px]" onClick={() => setEditing(null)} />
+          <div className="crm-rise relative w-full max-w-md rounded-2xl border border-(--crm-border) bg-(--crm-panel) p-6 shadow-2xl">
+            <button onClick={() => setEditing(null)} className="absolute right-3 top-3 rounded-lg p-1 text-(--crm-muted) hover:bg-(--crm-hover)" aria-label="Close"><X size={16} /></button>
+            <h3 className="text-base font-semibold tracking-[-.02em] text-(--crm-fg)">Edit contact</h3>
+            <p className="mt-0.5 text-sm text-(--crm-muted)">Update the name or phone number.</p>
+            <div className="mt-5 space-y-3">
+              <label className="block">
+                <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[.12em] text-(--crm-label)">Name</span>
+                <input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Contact name" className="h-10 w-full rounded-lg border border-(--crm-border-input) bg-(--crm-surface) px-3 text-sm outline-none transition-colors placeholder:text-(--crm-placeholder) focus:border-(--crm-focus-border) focus:ring-2 focus:ring-(--crm-focus-ring)" />
+              </label>
+              <label className="block">
+                <span className="mb-1.5 block text-[10px] font-semibold uppercase tracking-[.12em] text-(--crm-label)">Phone</span>
+                <input value={editPhone} onChange={(e) => setEditPhone(e.target.value)} placeholder="Phone number" className="h-10 w-full rounded-lg border border-(--crm-border-input) bg-(--crm-surface) px-3 font-mono text-sm outline-none transition-colors placeholder:text-(--crm-placeholder) focus:border-(--crm-focus-border) focus:ring-2 focus:ring-(--crm-focus-ring)" />
+              </label>
+            </div>
+            <div className="mt-6 flex gap-2">
+              <button onClick={() => setEditing(null)} className="flex-1 rounded-xl border border-(--crm-border) bg-(--crm-surface) py-2.5 text-sm font-semibold text-(--crm-secondary) transition-colors hover:bg-(--crm-hover)">Cancel</button>
+              <button onClick={() => void saveEdit()} className="flex-1 rounded-xl bg-(--crm-primary) py-2.5 text-sm font-semibold text-white transition-colors hover:bg-(--crm-dark)">Save</button>
+            </div>
+          </div>
+        </div>
       )}
       {toast && <div className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 rounded-xl bg-(--crm-dark) px-4 py-3 text-xs font-semibold text-white shadow-xl">{toast}</div>}
     </CrmShell>

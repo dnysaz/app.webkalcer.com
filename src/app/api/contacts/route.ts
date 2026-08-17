@@ -82,19 +82,39 @@ export async function POST(request: Request) {
   }
 }
 
-/** Updates a contact's status: { id, status }. */
+/** Updates a contact: status and/or name/phone (edit). */
 export async function PATCH(request: Request) {
   if (!(await requireAuth())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    const body = (await request.json()) as { id?: string; status?: string };
-    if (!body.id || !VALID_STATUSES.includes(body.status as ContactStatus)) {
-      return NextResponse.json({ error: "id and a valid status are required." }, { status: 400 });
+    const body = (await request.json()) as { id?: string; status?: string; name?: string; phone?: string };
+    if (!body.id) {
+      return NextResponse.json({ error: "id is required." }, { status: 400 });
     }
     const sql = getSql();
-    await sql`UPDATE contacts SET status = ${body.status} WHERE id = ${body.id}`;
+
+    // Status-only update (checkbox toggles).
+    if (body.status !== undefined) {
+      if (!VALID_STATUSES.includes(body.status as ContactStatus)) {
+        return NextResponse.json({ error: "Invalid status." }, { status: 400 });
+      }
+      await sql`UPDATE contacts SET status = ${body.status} WHERE id = ${body.id}`;
+      return NextResponse.json({ ok: true });
+    }
+
+    // Edit update (name/phone).
+    const name = typeof body.name === "string" ? body.name.trim().slice(0, 200) : undefined;
+    const phone = typeof body.phone === "string" ? body.phone.trim().slice(0, 40) : undefined;
+    if (!name && !phone) {
+      return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
+    }
+    await sql`
+      UPDATE contacts SET
+        name = COALESCE(${name ?? null}, name),
+        phone = COALESCE(${phone ?? null}, phone)
+      WHERE id = ${body.id}`;
     return NextResponse.json({ ok: true });
   } catch (error) {
-    console.error("Update contact status failed:", error);
+    console.error("Update contact failed:", error);
     return NextResponse.json({ error: "Something went wrong while updating the contact." }, { status: 500 });
   }
 }
