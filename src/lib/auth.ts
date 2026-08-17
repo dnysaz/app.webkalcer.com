@@ -2,7 +2,12 @@ import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 
-export const AUTH_COOKIE = "wcrmauth";
+// `__Host-` prefix hardens the cookie (Secure + path=/ + no Domain) but is
+// only accepted over HTTPS — plain http://localhost rejects Secure cookies,
+// so dev keeps a plain name while production gets the hardened one.
+export const AUTH_COOKIE = process.env.NODE_ENV === "production" ? "__Host-wcrmauth" : "wcrmauth";
+const TOKEN_ISSUER = "webkalcer-crm";
+const TOKEN_AUDIENCE = "webkalcer-crm";
 
 function getSecret(): Uint8Array {
   const secret = process.env.AUTH_SECRET;
@@ -13,6 +18,8 @@ function getSecret(): Uint8Array {
 export async function signToken(email: string): Promise<string> {
   return new SignJWT({ email })
     .setProtectedHeader({ alg: "HS256" })
+    .setIssuer(TOKEN_ISSUER)
+    .setAudience(TOKEN_AUDIENCE)
     .setIssuedAt()
     .setExpirationTime("30d")
     .sign(getSecret());
@@ -20,7 +27,10 @@ export async function signToken(email: string): Promise<string> {
 
 export async function verifyToken(token: string): Promise<string | null> {
   try {
-    const { payload } = await jwtVerify(token, getSecret());
+    const { payload } = await jwtVerify(token, getSecret(), {
+      issuer: TOKEN_ISSUER,
+      audience: TOKEN_AUDIENCE,
+    });
     return typeof payload.email === "string" ? payload.email : null;
   } catch {
     return null;

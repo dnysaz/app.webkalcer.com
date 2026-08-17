@@ -74,3 +74,13 @@ export function clientKey(request: Request): string {
 export function callerId(): string {
   return randomUUID();
 }
+
+/**
+ * True when a share passcode is weak (legacy `webk-MMDD` format, only 10k
+ * combinations) and needs a stricter attempt budget. New random codes
+ * (`webk-xxxxxx`, ~2.18B combos) are not brute-forceable and keep the
+ * default budget.
+ */
+export function isWeakPasscode(passcode: string): boolean {
+  return /^webk-\d{4}$/i.test(passcode);
+}

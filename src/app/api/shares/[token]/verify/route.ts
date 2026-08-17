@@ -3,13 +3,16 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 import { query, rowToCustomer, rowToInvoice, rowToPaymentSettings, rowToQuote } from "@/lib/db";
 import type { CustomerRow, InvoiceRow, PaymentSettingsRow, QuoteRow } from "@/lib/db";
-import { rateLimit, clientKey } from "@/lib/rate-limit";
+import { isWeakPasscode, rateLimit, clientKey } from "@/lib/rate-limit";
 
 type ShareRow = { doc_type: string; doc_id: string };
 
 /** Returns a 401/429 response, counting only failed passcode attempts. */
-function rejectInvalidPasscode(request: Request, token: string): NextResponse {
-  const limiter = rateLimit(`share:${token}:${clientKey(request)}`, { limit: 20, windowMs: 15 * 60_000 });
+function rejectInvalidPasscode(request: Request, token: string, passcode: string): NextResponse {
+  // Legacy `webk-MMDD` codes (10k combos) get a much tighter budget; random
+  // codes are not brute-forceable and keep the default.
+  const limit = isWeakPasscode(passcode) ? 2 : 20;
+  const limiter = rateLimit(`share:${token}:${clientKey(request)}`, { limit, windowMs: 15 * 60_000 });
   if (!limiter.allowed) {
     return NextResponse.json(
       { error: "Too many attempts. Try again later." },
@@ -38,7 +41,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
     const customers = await query<CustomerRow>`SELECT * FROM customers WHERE id = ${invoice.customer_id}`;
     const customer = customers[0];
     const expected = (customer?.code ?? "").toLowerCase();
-    if (!expected || passcode !== expected) return rejectInvalidPasscode(request, token);
+    if (!expected || passcode !== expected) return rejectInvalidPasscode(request, token, passcode);
     return NextResponse.json({
       docType: "invoice",
       doc: rowToInvoice(invoice),
@@ -53,7 +56,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
   const customers = await query<CustomerRow>`SELECT * FROM customers WHERE id = ${quote.customer_id}`;
   const customer = customers[0];
   const expected = (customer?.code ?? "").toLowerCase();
-  if (!expected || passcode !== expected) return rejectInvalidPasscode(request, token);
+  if (!expected || passcode !== expected) return rejectInvalidPasscode(request, token, passcode);
   return NextResponse.json({
     docType: "quote",
     doc: rowToQuote(quote),

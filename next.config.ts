@@ -16,11 +16,12 @@ const r2Host = (() => {
 })();
 
 // CSP is deliberately pragmatic: Next.js App Router inlines the RSC flight
-// payload (`script-src 'unsafe-inline'`) and jsPDF uses blob/data URLs, so the
-// strictest possible policy isn't compatible without nonce plumbing.
+// payload (`script-src 'unsafe-inline'`), so the strictest possible policy
+// isn't compatible without nonce plumbing. `unsafe-eval` is intentionally NOT
+// allowed — jsPDF only needs it on legacy browsers that lack the File API.
 const csp = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
+  "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https: http:",
   "font-src 'self' data:",

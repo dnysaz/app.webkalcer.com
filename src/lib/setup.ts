@@ -114,6 +114,18 @@ async function runSetupDatabase() {
     created_at timestamptz NOT NULL DEFAULT now()
   )`;
   await sql`ALTER TABLE users ADD COLUMN IF NOT EXISTS name text NOT NULL DEFAULT ''`;
+  // Defensive dedupe: if a pre-existing race already created 2+ admins, keep the
+  // earliest and demote the rest so the partial unique index below can be built
+  // (role is not used for access control, so nobody gets locked out).
+  await sql`UPDATE users SET role = 'member' WHERE role = 'admin'
+    AND id <> (SELECT id FROM users WHERE role = 'admin' ORDER BY created_at, id LIMIT 1)`;
+  // Enforce a single admin at the database level — the register route's
+  // count() check has a race window; the partial unique index closes it.
+  await sql`DO $$ BEGIN
+    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_single_admin_key') THEN
+      ALTER TABLE users ADD CONSTRAINT users_single_admin_key UNIQUE (role) WHERE role = 'admin';
+    END IF;
+  END $$;`;
 
   await sql`CREATE TABLE IF NOT EXISTS payment_settings (
     id text PRIMARY KEY,
@@ -557,16 +569,26 @@ export interface DbCounts {
   webAssets: number;
 }
 
+/**
+ * Bump whenever a new migration/DDL is added inside `runSetupDatabase`.
+ * Serverless instances cache `setupPromise`; a version bump makes the next
+ * call re-run the migration instead of serving the stale cache.
+ */
+const SCHEMA_VERSION = 2;
+
 let setupPromise: Promise<DbCounts> | null = null;
+let setupVersion = 0;
 
 /**
  * Ensures the schema + seed data are set up, running the migration at most once
  * per serverless instance. Subsequent calls resolve instantly so API routes
  * (e.g. /api/payment) don't re-run ~30 queries on every request.
  * If setup fails, the cache is cleared so the next call retries.
+ * Pass `force` to bypass the cache (used by the admin setup route).
  */
-export function setupDatabase(): Promise<DbCounts> {
-  if (!setupPromise) {
+export function setupDatabase(force = false): Promise<DbCounts> {
+  if (force || !setupPromise || setupVersion !== SCHEMA_VERSION) {
+    setupVersion = SCHEMA_VERSION;
     setupPromise = runSetupDatabase().catch((error) => {
       setupPromise = null;
       throw error;

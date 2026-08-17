@@ -11,7 +11,9 @@ type UserRow = { name: string };
 export async function GET() {
   await setupDatabase();
   const email = await getSessionEmail();
-  const rows = await query<CountRow>`SELECT count(*)::int AS n FROM users`;
+  // "Admin exists" = at least one user with role 'admin' — non-admin/member
+  // users must never re-enable the registration form.
+  const rows = await query<CountRow>`SELECT count(*)::int AS n FROM users WHERE role = 'admin'`;
   const adminExists = (rows[0]?.n ?? 0) > 0;
 
   if (!email) {

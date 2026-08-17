@@ -22,7 +22,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Password must be at least 8 characters." }, { status: 400 });
     }
 
-    const existing = await query<CountRow>`SELECT count(*)::int AS n FROM users`;
+    // Register is only for the very first admin account. Non-admin rows (role
+    // != 'admin') must not count — otherwise a demoted user would re-enable it.
+    const existing = await query<CountRow>`SELECT count(*)::int AS n FROM users WHERE role = 'admin'`;
     if ((existing[0]?.n ?? 0) > 0) {
       return NextResponse.json({ error: "Admin already registered." }, { status: 403 });
     }
@@ -35,8 +37,9 @@ export async function POST(request: Request) {
         INSERT INTO users (id, email, password_hash, name, role)
         VALUES (${id}, ${email}, ${hash}, '', 'admin')`;
     } catch (error) {
-      // Two requests can pass the count() check at once; the UNIQUE(email)
-      // constraint makes the race harmless — surface the same denial.
+      // Two requests can pass the count() check at once; the UNIQUE(email) and
+      // single-admin partial unique constraints make the race harmless —
+      // surface the same denial either way.
       if ((error as { code?: string })?.code === "23505") {
         return NextResponse.json({ error: "Admin already registered." }, { status: 403 });
       }

@@ -7,7 +7,9 @@ import { requireAuth } from "@/lib/auth";
 export async function POST() {
   if (!(await requireAuth())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    const counts = await setupDatabase();
+    // force: re-run the migration so newly shipped DDL (e.g. the single-admin
+    // constraint) applies even if this instance already cached the setup.
+    const counts = await setupDatabase(true);
     return NextResponse.json({ ok: true, counts });
   } catch (error) {
     console.error("Database setup failed:", error);
