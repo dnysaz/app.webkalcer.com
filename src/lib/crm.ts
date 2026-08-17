@@ -117,6 +117,18 @@ export type WebAsset = {
   createdAt: string;
 };
 
+/** Contact book entry — name + phone imported from an uploaded CSV. */
+export type ContactStatus = "new" | "reached" | "unreachable";
+
+export type Contact = {
+  id: string;
+  name: string;
+  phone: string;
+  status: ContactStatus;
+  csvUrl: string;
+  createdAt: string;
+};
+
 export function productEffectivePrice(product: Pick<Product, "price" | "promo" | "discount">): number {
   if (!product.promo) return product.price;
   return Math.round(product.price * (1 - product.discount / 100));

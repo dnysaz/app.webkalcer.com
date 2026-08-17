@@ -1,5 +1,5 @@
 import { neon } from "@neondatabase/serverless";
-import type { BankAccount, Customer, CustomerStatus, Invoice, InvoiceItem, InvoiceStatus, Note, PaymentSettings, Product, Quote, QuoteStatus, WebAsset, WebAssetType } from "./crm";
+import type { BankAccount, Contact, Customer, CustomerStatus, Invoice, InvoiceItem, InvoiceStatus, Note, PaymentSettings, Product, Quote, QuoteStatus, WebAsset, WebAssetType } from "./crm";
 
 let _sql: ReturnType<typeof neon> | null = null;
 
@@ -96,6 +96,15 @@ export interface WebAssetRow {
   expiry_date: string | null;
   price: number | null;
   notes: string | null;
+  created_at: Date | string;
+}
+
+export interface ContactRow {
+  id: string;
+  name: string;
+  phone: string;
+  status: string;
+  csv_url: string | null;
   created_at: Date | string;
 }
 
@@ -203,6 +212,17 @@ export function rowToWebAsset(row: WebAssetRow): WebAsset {
     expiryDate: row.expiry_date ?? "",
     price: Number(row.price ?? 0),
     notes: row.notes ?? "",
+    createdAt: toIso(row.created_at),
+  };
+}
+
+export function rowToContact(row: ContactRow): Contact {
+  return {
+    id: row.id,
+    name: row.name,
+    phone: row.phone,
+    status: (row.status as Contact["status"]) || "new",
+    csvUrl: row.csv_url ?? "",
     createdAt: toIso(row.created_at),
   };
 }

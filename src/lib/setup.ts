@@ -150,6 +150,15 @@ async function runSetupDatabase() {
   await sql`ALTER TABLE settings ADD COLUMN IF NOT EXISTS gemini_api_key text NOT NULL DEFAULT ''`;
   await sql`INSERT INTO settings (id) VALUES ('site') ON CONFLICT (id) DO NOTHING`;
 
+  await sql`CREATE TABLE IF NOT EXISTS contacts (
+    id text PRIMARY KEY,
+    name text NOT NULL,
+    phone text NOT NULL,
+    status text NOT NULL DEFAULT 'new',
+    csv_url text NOT NULL DEFAULT '',
+    created_at timestamptz NOT NULL DEFAULT now()
+  )`;
+
   await sql`UPDATE invoices SET status = CASE status
     WHEN 'Paid' THEN 'Done'
     WHEN 'Sent' THEN 'Active'
@@ -571,7 +580,7 @@ export interface DbCounts {
  * Serverless instances cache `setupPromise`; a version bump makes the next
  * call re-run the migration instead of serving the stale cache.
  */
-const SCHEMA_VERSION = 3;
+const SCHEMA_VERSION = 4;
 
 let setupPromise: Promise<DbCounts> | null = null;
 let setupVersion = 0;
