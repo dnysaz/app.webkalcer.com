@@ -179,7 +179,7 @@ export function ProductsView() {
               <InfoBox label="Base price" value={formatRupiah(detail.price)} />
               <InfoBox label="Tax" value={`${detail.tax}%`} />
             </div>
-            {detail.detail && <div className="mt-4 rounded-xl border border-(--crm-border) bg-(--crm-surface) p-4"><p className="text-[10px] font-semibold uppercase tracking-[.14em] text-(--crm-label)">Details</p><p className="mt-1.5 text-sm leading-6 text-(--crm-body)">{detail.detail}</p></div>}
+            {detail.detail && <div className="mt-4 rounded-xl border border-(--crm-border) bg-(--crm-surface) p-4"><p className="text-[10px] font-semibold uppercase tracking-[.14em] text-(--crm-label)">Details</p><p className="mt-1.5 whitespace-pre-line text-sm leading-6 text-(--crm-body)">{detail.detail}</p></div>}
         </RightDrawer>
       )}
 
