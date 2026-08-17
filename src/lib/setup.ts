@@ -120,12 +120,9 @@ async function runSetupDatabase() {
   await sql`UPDATE users SET role = 'member' WHERE role = 'admin'
     AND id <> (SELECT id FROM users WHERE role = 'admin' ORDER BY created_at, id LIMIT 1)`;
   // Enforce a single admin at the database level — the register route's
-  // count() check has a race window; the partial unique index closes it.
-  await sql`DO $$ BEGIN
-    IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'users_single_admin_key') THEN
-      ALTER TABLE users ADD CONSTRAINT users_single_admin_key UNIQUE (role) WHERE role = 'admin';
-    END IF;
-  END $$;`;
+  // count() check has a race window. Note: partial uniqueness is only possible
+  // via CREATE UNIQUE INDEX (ALTER TABLE ADD CONSTRAINT doesn't support WHERE).
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS users_single_admin_key ON users (role) WHERE role = 'admin'`;
 
   await sql`CREATE TABLE IF NOT EXISTS payment_settings (
     id text PRIMARY KEY,
@@ -574,7 +571,7 @@ export interface DbCounts {
  * Serverless instances cache `setupPromise`; a version bump makes the next
  * call re-run the migration instead of serving the stale cache.
  */
-const SCHEMA_VERSION = 2;
+const SCHEMA_VERSION = 3;
 
 let setupPromise: Promise<DbCounts> | null = null;
 let setupVersion = 0;

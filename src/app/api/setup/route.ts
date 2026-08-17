@@ -7,9 +7,10 @@ import { requireAuth } from "@/lib/auth";
 export async function POST() {
   if (!(await requireAuth())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    // force: re-run the migration so newly shipped DDL (e.g. the single-admin
-    // constraint) applies even if this instance already cached the setup.
-    const counts = await setupDatabase(true);
+    // Runs the migration once per instance (or when SCHEMA_VERSION bumps) —
+    // NOT on every request. `setupDatabase(true)` would force ~30 DDL
+    // statements on each visit and make every page load slow.
+    const counts = await setupDatabase();
     return NextResponse.json({ ok: true, counts });
   } catch (error) {
     console.error("Database setup failed:", error);
