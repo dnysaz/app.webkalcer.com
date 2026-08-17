@@ -13,6 +13,8 @@ const STATUS_LABELS: Record<ContactStatus, string> = {
   unreachable: "Not reachable",
 };
 
+const PAGE_SIZE = 25;
+
 export function ContactBookView() {
   const [contacts, setContacts] = useState<Contact[]>([]);
   const [loading, setLoading] = useState(true);
@@ -20,6 +22,7 @@ export function ContactBookView() {
   const [toast, setToast] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | ContactStatus>("all");
+  const [page, setPage] = useState(1);
   const [confirmDelete, setConfirmDelete] = useState<Contact | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -66,6 +69,7 @@ export function ContactBookView() {
       if (!res.ok) throw new Error(data.error ?? "Upload failed");
       const imported = data.contacts ?? [];
       setContacts((prev) => [...imported, ...prev]);
+      setPage(1);
       announce(`${data.count ?? imported.length} contact${(data.count ?? imported.length) === 1 ? "" : "s"} imported`);
     } catch (error) {
       announce(error instanceof Error ? error.message : "Upload failed. Please try again.");
@@ -111,6 +115,10 @@ export function ContactBookView() {
     return `${c.name} ${c.phone}`.toLowerCase().includes(query);
   });
 
+  const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const currentPage = Math.min(page, totalPages);
+  const pageItems = visible.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
   const reachedCount = contacts.filter((c) => c.status === "reached").length;
   const unreachableCount = contacts.filter((c) => c.status === "unreachable").length;
 
@@ -145,11 +153,11 @@ export function ContactBookView() {
       <div className="crm-rise mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
         <div className="relative flex-1">
           <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-(--crm-muted)" />
-          <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name or phone..." className="w-full rounded-xl border border-(--crm-border-input) bg-(--crm-panel) py-2.5 pl-9 pr-3 text-sm text-(--crm-fg) outline-none transition-colors placeholder:text-(--crm-placeholder) focus:border-(--crm-accent)" />
+          <input value={search} onChange={(e) => { setSearch(e.target.value); setPage(1); }} placeholder="Search name or phone..." className="w-full rounded-xl border border-(--crm-border-input) bg-(--crm-panel) py-2.5 pl-9 pr-3 text-sm text-(--crm-fg) outline-none transition-colors placeholder:text-(--crm-placeholder) focus:border-(--crm-accent)" />
         </div>
         <div className="flex gap-1 rounded-xl border border-(--crm-border) bg-(--crm-surface) p-1">
           {(["all", "new", "reached", "unreachable"] as const).map((key) => (
-            <button key={key} onClick={() => setFilter(key)} className={`rounded-lg px-3 py-1.5 text-xs font-semibold capitalize transition-colors ${filter === key ? "bg-(--crm-focus-ring) text-(--crm-text) shadow-sm" : "text-(--crm-muted) hover:text-(--crm-body)"}`}>
+            <button key={key} onClick={() => { setFilter(key); setPage(1); }} className={`rounded-lg px-3 py-1.5 text-xs font-semibold capitalize transition-colors ${filter === key ? "bg-(--crm-focus-ring) text-(--crm-text) shadow-sm" : "text-(--crm-muted) hover:text-(--crm-body)"}`}>
               {key === "all" ? "All" : STATUS_LABELS[key]}
             </button>
           ))}
@@ -180,7 +188,7 @@ export function ContactBookView() {
                 </tr>
               </thead>
               <tbody>
-                {visible.map((contact) => (
+                {pageItems.map((contact) => (
                   <tr key={contact.id} className="border-t border-(--crm-border-soft)">
                     <td className="px-6 py-3.5">
                       <div className="flex items-center gap-3">
@@ -199,7 +207,7 @@ export function ContactBookView() {
             </table>
           </div>
           <div className="divide-y divide-(--crm-border-soft) md:hidden">
-            {visible.map((contact) => (
+            {pageItems.map((contact) => (
               <div key={contact.id} className="flex items-center gap-3 p-4">
                 <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-(--crm-soft) text-[11px] font-bold text-(--crm-fg)">{contact.name.slice(0, 2).toUpperCase()}</span>
                 <div className="min-w-0 flex-1">
@@ -209,6 +217,30 @@ export function ContactBookView() {
                 <StatusChecks contact={contact} onStatus={(s) => void setStatus(contact, s)} />
               </div>
             ))}
+          </div>
+        </div>
+      )}
+
+      {/* Pagination */}
+      {!loading && visible.length > PAGE_SIZE && (
+        <div className="crm-rise mt-5 flex flex-col items-center justify-between gap-3 sm:flex-row">
+          <p className="text-xs text-(--crm-muted)">Showing {pageItems.length} of {visible.length} contacts</p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+              className="rounded-lg border border-(--crm-border-input) px-3 py-1.5 text-xs font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover) disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Previous
+            </button>
+            <span className="px-2 text-xs font-semibold text-(--crm-fg)">{currentPage} / {totalPages}</span>
+            <button
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+              className="rounded-lg border border-(--crm-border-input) px-3 py-1.5 text-xs font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover) disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Next
+            </button>
           </div>
         </div>
       )}
