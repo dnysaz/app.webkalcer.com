@@ -7,10 +7,9 @@ type SettingsRow = { gemini_api_key: string };
 export const MAX_GEMINI_KEYS = 5;
 
 /** Gemini models used for AI generation, tried in order.
- *  Google occasionally returns 503 "high demand" for a given model, so we
- *  fall back to the next one. Override the whole list via GEMINI_MODEL env
- *  (comma-separated, e.g. "gemini-3.6-flash,gemini-flash-latest"). */
-const GEMINI_MODELS = (process.env.GEMINI_MODEL || "gemini-3.6-flash,gemini-flash-latest")
+ *  If one model returns an error or is unavailable, the next is tried.
+ *  Override the whole list via GEMINI_MODEL env var (comma-separated). */
+const GEMINI_MODELS = (process.env.GEMINI_MODEL || "gemini-2.5-flash,gemini-3.6-flash,gemini-3.5-flash")
   .split(",")
   .map((m) => m.trim())
   .filter(Boolean);
