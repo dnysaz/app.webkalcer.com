@@ -160,7 +160,6 @@ function WebsiteSection({ onToast }: { onToast: (message: string) => void }) {
 function AiSection({ onToast }: { onToast: (message: string) => void }) {
   const { settings, updateSettings } = useSettings();
   const [keys, setKeys] = useState<string[]>(() => Array.from({ length: Math.max(1, settings.geminiKeyCount) }, () => ""));
-  const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const keyConfigured = settings.hasGeminiKey;
   const filledKeys = keys.flatMap((k) => k.split(/\r?\n/).map((s) => s.trim()).filter(Boolean));
@@ -221,11 +220,12 @@ function AiSection({ onToast }: { onToast: (message: string) => void }) {
           {keys.map((key, index) => (
             <div key={index} className="flex gap-2">
               <input
-                type={show ? "text" : "password"}
+                type="text"
                 value={key}
                 onChange={(e) => setKey(index, e.target.value)}
-                placeholder={index === 0 && keyConfigured && !key.trim() ? "••••••••••••••••  (key already set)" : "AIza…"}
+                placeholder={index === 0 && keyConfigured && !key.trim() ? "••••••••••••••••  (key already set)" : "AIza… or AQ.…"}
                 autoComplete="off"
+                spellCheck={false}
                 className="h-10 flex-1 rounded-lg border border-(--crm-border-input) bg-(--crm-surface) px-3 font-mono text-sm outline-none transition-colors placeholder:text-(--crm-placeholder) focus:border-(--crm-mid) focus:ring-2 focus:ring-(--crm-soft)"
               />
               {keys.length > 1 && (
@@ -236,11 +236,10 @@ function AiSection({ onToast }: { onToast: (message: string) => void }) {
         </div>
         <div className="flex flex-wrap gap-2">
           <button onClick={addKey} disabled={keys.length >= 5} className="flex items-center gap-1.5 rounded-lg border border-(--crm-border-input) px-3 py-2 text-xs font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover) disabled:cursor-not-allowed disabled:opacity-50"><Plus size={14} />Add API key ({keys.length}/5)</button>
-          <button onClick={() => setShow((prev) => !prev)} className="flex items-center gap-1.5 rounded-lg border border-(--crm-border-input) px-3 py-2 text-xs font-semibold text-(--crm-secondary) transition-colors hover:bg-(--crm-hover)" title={show ? "Hide keys" : "Show keys"} aria-label={show ? "Hide keys" : "Show keys"}>{show ? <EyeOff size={14} /> : <Eye size={14} />}{show ? "Hide" : "Show"}</button>
-          <button onClick={() => void saveKey()} disabled={busy || hasDuplicate || (!changed && !keyConfigured)} className="flex items-center gap-1.5 rounded-lg bg-(--crm-primary) px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-(--crm-dark) disabled:cursor-not-allowed disabled:opacity-60"><KeyRound size={14} />{busy ? "Saving…" : changed ? "Save keys" : "Clear"}</button>
+          <button onClick={() => void saveKey()} disabled={busy || hasDuplicate || (!changed && !keyConfigured)} className="flex items-center gap-1.5 rounded-lg bg-(--crm-primary) px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-(--crm-dark) disabled:cursor-not-allowed disabled:opacity-60"><KeyRound size={14} />{busy ? "Saving…" : changed ? `Save ${filledKeys.length} key${filledKeys.length > 1 ? "s" : ""}` : "Clear"}</button>
         </div>
         {hasDuplicate && <p className="text-[11px] font-semibold text-(--crm-danger)">Duplicate API keys detected — each key must be unique.</p>}
-        <p className="text-[11px] leading-5 text-(--crm-muted)">Get free keys at <span className="font-mono text-(--crm-brand)">aistudio.google.com/apikey</span>. Separate each key with a new line — up to 5 keys. When one key hits a rate limit or error, the next key is used automatically. Keys are stored securely in the database, never sent to the browser.</p>
+        <p className="text-[11px] leading-5 text-(--crm-muted)">Get free keys at <span className="font-mono text-(--crm-brand)">aistudio.google.com/apikey</span>. Each input holds one key — add up to 5. When one key hits a rate limit or error, the next is used automatically. Keys are stored securely in the database, never sent to the browser.</p>
         <p className="text-[11px] leading-5 text-(--crm-muted)">Status: <span className={`font-semibold ${keyConfigured ? "text-(--crm-mid)" : "text-(--crm-danger)"}`}>{keyConfigured ? "API keys configured" : "No API key configured"}</span></p>
       </div>
     </SectionCard>
