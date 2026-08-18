@@ -23,6 +23,7 @@ import { RightDrawer } from "@/components/crm/RightDrawer";
 import type { ArticleLength, HumanizeData, SeoArticle, SeoData, SwotData } from "@/lib/crm";
 import { formatDate, uid } from "@/lib/crm";
 import { buildArticlePdf, downloadPdf } from "@/lib/pdf";
+import { buildArticleDocxBlob } from "@/lib/docx";
 import type { ArticleFormData } from "@/app/api/seo/article/route";
 import type { ArticleStyle } from "@/app/api/seo/article/route";
 import type { SeoGenResult } from "@/app/api/seo/optimize/route";
@@ -426,6 +427,23 @@ export function ContentSeoView() {
     announce("Downloaded");
   }
 
+  async function downloadWord(content: string, title: string) {
+    try {
+      const blob = await buildArticleDocxBlob({ title, content });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${title.replace(/[^a-z0-9-]+/gi, "-").toLowerCase().slice(0, 60)}.docx`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      announce("Word document downloaded");
+    } catch {
+      announce("Failed to generate Word document");
+    }
+  }
+
   async function downloadArticlePdf(article: Pick<SeoArticle, "title" | "content" | "createdAt">, seo?: SeoData | null, swot?: SwotData | null) {
     try {
       const doc = await buildArticlePdf(article, seo, swot);
@@ -545,7 +563,7 @@ export function ContentSeoView() {
                   <div className="flex items-center gap-2 text-sm font-semibold"><PenLine size={16} className="text-(--crm-brand)" />{draft.topic}</div>
                   <div className="flex flex-wrap items-center gap-2">
                     <button onClick={() => void copyText(draft.markdown, "Article copied to clipboard")} className="flex items-center gap-1.5 rounded-xl border border-(--crm-border-input) px-3 py-2 text-xs font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover)"><Copy size={14} />{copied ? "Copied!" : "Copy"}</button>
-                    <button onClick={() => downloadText(draft.markdown, `${draft.topic.replace(/[^a-z0-9-]+/gi, "-").toLowerCase().slice(0, 60)}.md`)} className="flex items-center gap-1.5 rounded-xl border border-(--crm-border-input) px-3 py-2 text-xs font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover)"><Download size={14} />.md</button>
+                    <button onClick={() => void downloadWord(draft.markdown, draft.topic)} className="flex items-center gap-1.5 rounded-xl border border-(--crm-border-input) px-3 py-2 text-xs font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover)"><Download size={14} />Word</button>
                     <button onClick={() => void downloadArticlePdf({ title: draft.topic, content: draft.markdown, createdAt: new Date().toISOString() })} className="flex items-center gap-1.5 rounded-xl border border-(--crm-border-input) px-3 py-2 text-xs font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover)"><FileText size={14} />PDF</button>
                     <button onClick={() => void generateArticle()} disabled={generating} className="flex items-center gap-1.5 rounded-xl border border-(--crm-border-input) px-3 py-2 text-xs font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover) disabled:cursor-not-allowed disabled:opacity-60"><RefreshCw size={14} className={generating ? "animate-spin" : ""} />Regenerate</button>
                     <button onClick={() => { setDraftMode(false); setDraft(null); }} className="flex items-center gap-1.5 rounded-xl border border-(--crm-border-input) px-3 py-2 text-xs font-semibold text-(--crm-secondary) transition-colors hover:bg-(--crm-hover)"><X size={14} />Edit form</button>
@@ -708,7 +726,7 @@ export function ContentSeoView() {
                           <button onClick={() => { setTab("seo"); selectForSeo(article.id); }} className="rounded-lg p-2 text-(--crm-muted) transition-colors hover:bg-(--crm-soft) hover:text-(--crm-text)" title="Run SEO" aria-label="Run SEO"><Wand2 size={14} /></button>
                           <button onClick={() => { setTab("swot"); selectForSwot(article.id); }} className="rounded-lg p-2 text-(--crm-muted) transition-colors hover:bg-(--crm-soft) hover:text-(--crm-text)" title="Run SWOT" aria-label="Run SWOT"><Bot size={14} /></button>
                           <button onClick={() => void downloadArticlePdf(article, article.seo, article.swot)} className="rounded-lg p-2 text-(--crm-muted) transition-colors hover:bg-(--crm-soft) hover:text-(--crm-text)" title="Download PDF (article + reports)" aria-label="Download PDF"><FileText size={14} /></button>
-                          <button onClick={() => downloadText(article.content, `${article.title.replace(/[^a-z0-9-]+/gi, "-").toLowerCase().slice(0, 60)}.md`)} className="rounded-lg p-2 text-(--crm-muted) transition-colors hover:bg-(--crm-soft) hover:text-(--crm-text)" title="Download .md" aria-label="Download .md"><Download size={14} /></button>
+                          <button onClick={() => void downloadWord(article.content, article.title)} className="rounded-lg p-2 text-(--crm-muted) transition-colors hover:bg-(--crm-soft) hover:text-(--crm-text)" title="Download .docx" aria-label="Download .docx"><Download size={14} /></button>
                           <button onClick={() => setConfirmDelete(article)} className="rounded-lg p-2 text-(--crm-muted) transition-colors hover:bg-(--crm-danger-bg) hover:text-(--crm-danger)" title="Delete article" aria-label="Delete article"><Trash2 size={14} /></button>
                         </div>
                       </td>
@@ -752,7 +770,7 @@ export function ContentSeoView() {
             <>
               <button onClick={() => void copyText(detail.content, "Article copied")} className="flex items-center gap-1.5 rounded-xl border border-(--crm-border-input) px-4 py-2.5 text-sm font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover)"><Copy size={15} />Copy article</button>
               <button onClick={() => void downloadArticlePdf(detail, detail.seo, detail.swot)} className="flex items-center gap-1.5 rounded-xl border border-(--crm-border-input) px-4 py-2.5 text-sm font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover)"><FileText size={15} />PDF</button>
-              <button onClick={() => downloadText(detail.content, `${detail.title.replace(/[^a-z0-9-]+/gi, "-").toLowerCase().slice(0, 60)}.md`)} className="flex items-center gap-1.5 rounded-xl border border-(--crm-border-input) px-4 py-2.5 text-sm font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover)"><Download size={15} />.md</button>
+              <button onClick={() => void downloadWord(detail.content, detail.title)} className="flex items-center gap-1.5 rounded-xl border border-(--crm-border-input) px-4 py-2.5 text-sm font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover)"><Download size={15} />.docx</button>
               <div className="flex-1" />
               <button onClick={() => openEditArticle(detail)} className="rounded-xl border border-(--crm-border-input) px-4 py-2.5 text-sm font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover)">Edit</button>
               <button onClick={() => setDetail(null)} className="rounded-xl border border-(--crm-border) px-4 py-2.5 text-sm font-semibold text-(--crm-secondary) transition-colors hover:bg-(--crm-hover)">Close</button>

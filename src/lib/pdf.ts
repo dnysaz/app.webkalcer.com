@@ -1,5 +1,5 @@
 import { jsPDF } from "jspdf";
-import type { Customer, Invoice, InvoiceItem, PaymentSettings, Product, Quote, SeoArticle, SeoData, SwotData } from "@/lib/crm";
+import type { Customer, HumanizeData, Invoice, InvoiceItem, PaymentSettings, Product, Quote, SeoArticle, SeoData, SwotData } from "@/lib/crm";
 import { computeTotals, formatDate, formatPhones, formatRupiah, productEffectivePrice } from "@/lib/crm";
 
 type RGB = [number, number, number];
@@ -57,6 +57,7 @@ const FOOT_DEF: RGB = [154, 167, 160]; // #9aa7a0
 const HEADNUM_DEF: RGB = [214, 229, 222]; // #d6e5de
 const PRICE_DEF: RGB = [125, 140, 133]; // #7d8c85
 const SEP_DEF: RGB = [220, 230, 224]; // #dce6e0
+const DANGER_DEF: RGB = [186, 73, 73]; // AI-written share (content check red)
 const HEADER_SUB_DEF: RGB = [189, 201, 198]; // white/70 over #234b42
 
 const STATUS_TONES_DEF: Record<string, [RGB, RGB]> = {
@@ -81,6 +82,7 @@ let FOOT: RGB = FOOT_DEF;
 let HEADNUM: RGB = HEADNUM_DEF;
 let PRICE: RGB = PRICE_DEF;
 let SEP: RGB = SEP_DEF;
+let DANGER: RGB = DANGER_DEF;
 let HEADER_SUB: RGB = HEADER_SUB_DEF;
 let STATUS_TONES: Record<string, [RGB, RGB]> = { ...STATUS_TONES_DEF };
 
@@ -106,6 +108,7 @@ function refreshTheme() {
   FOOT = cssVar("--crm-muted", FOOT_DEF);
   PRICE = cssVar("--crm-secondary", PRICE_DEF);
   SEP = cssVar("--crm-border", SEP_DEF);
+  DANGER = cssVar("--crm-danger", DANGER_DEF);
   // Header number + sub-label are light tints over the primary band.
   HEADNUM = mixRgb(GREEN, [255, 255, 255], 0.78);
   HEADER_SUB = mixRgb(GREEN, [255, 255, 255], 0.72);
@@ -744,85 +747,193 @@ export function downloadPdf(doc: jsPDF, filename: string) {
   doc.save(filename);
 }
 
-/** Draws a donut ring gauge: gray track ring + green progress arc + white hole. */
+/**
+ * Draws a clean progress-ring gauge (vector, theme-aware): a light track ring
+ * plus a rounded green arc from 12 o'clock, with a small tail gap when the
+ * value isn't full. Works everywhere, unlike a canvas snapshot.
+ */
 function drawDonut(doc: jsPDF, cx: number, cy: number, r: number, pct: number) {
   const clamped = Math.max(0, Math.min(1, pct));
+  const lw = Math.max(3, r * 0.32);
+  doc.setLineCap("round");
+
   // Track ring.
   doc.setDrawColor(...BORDER);
-  doc.setLineWidth(4);
+  doc.setLineWidth(lw);
   doc.circle(cx, cy, r, "S");
-  // Progress arc from 12 o'clock, clockwise.
-  if (clamped > 0) {
+
+  // Progress arc (rounded ends) from 12 o'clock, clockwise.
+  if (clamped > 0.005) {
     doc.setDrawColor(...GREEN);
-    doc.setLineWidth(4);
-    const start = -90;
-    const end = -90 + 360 * clamped;
-    const steps = Math.max(8, Math.round(72 * Math.max(0.05, clamped)));
-    for (let s = 0; s < steps; s++) {
-      const a0 = ((start + ((end - start) * s) / steps) * Math.PI) / 180;
-      const a1 = ((start + ((end - start) * (s + 1)) / steps) * Math.PI) / 180;
+    doc.setLineWidth(lw);
+    const sweep = 360 * clamped;
+    // Small gap at the tail so a full-ish ring isn't a closed circle.
+    const inset = clamped >= 1 ? 0 : Math.min(6, sweep * 0.08);
+    const start = (-90 + inset) * (Math.PI / 180);
+    const end = (-90 + sweep - inset) * (Math.PI / 180);
+    const segs = Math.max(48, Math.round(sweep / 2));
+    for (let s = 0; s < segs; s++) {
+      const a0 = start + ((end - start) * s) / segs;
+      const a1 = start + ((end - start) * (s + 1)) / segs;
       doc.line(cx + r * Math.cos(a0), cy + r * Math.sin(a0), cx + r * Math.cos(a1), cy + r * Math.sin(a1));
     }
   }
-  // Cut out the center so the progress arc reads as a ring.
-  doc.setFillColor(255, 255, 255);
-  doc.setDrawColor(255, 255, 255);
-  doc.circle(cx, cy, r - 4.5, "FD");
+
+  doc.setLineCap("butt");
 }
 
 /**
- * Renders a donut gauge with Chart.js to an offscreen canvas and returns a
- * PNG data URL. Falls back to `null` when Chart.js/canvas is unavailable
- * (SSR/node) — callers then use the manual `drawDonut`.
+ * Score card used by the SEO/SWOT report pages: rounded card with the donut
+ * gauge on the left (score + tag inside the ring) and a label on the right.
  */
-async function chartDonutDataUrl(score: number): Promise<string | null> {
-  try {
-    const { Chart } = await import("chart.js");
-    const canvas = document.createElement("canvas");
-    canvas.width = 400;
-    canvas.height = 400;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return null;
+function scoreGaugeCard(doc: jsPDF, y: number, score: number, tag: string, label: string, sub: string): number {
+  const w = contentWidth(doc);
+  const pad = 6;
+  const cardH = 48;
+  const donutR = 15;
 
-    const leftover = 100 - score;
-    new Chart(ctx, {
-      type: "doughnut",
-      data: {
-        labels: ["Score", "Remaining"],
-        datasets: [
-          {
-            data: [score, leftover],
-            backgroundColor: ["#234b42", "#e3e9e4"],
-            borderWidth: 0,
-            borderRadius: 6,
-          },
-        ],
-      },
-      options: {
-        responsive: false,
-        cutout: "72%",
-        plugins: {
-          legend: { display: false },
-          tooltip: { enabled: false },
-        },
-      },
-    });
-    // Give Chart.js a tick to paint, then snapshot.
-    await new Promise((resolve) => setTimeout(resolve, 30));
-    const url = canvas.toDataURL("image/png");
-    // Clean up the chart instance so it doesn't keep a reference.
-    (Chart as unknown as { instances?: Record<string, unknown> }).instances = {};
-    return url;
-  } catch {
-    return null;
+  if (y + cardH + 10 > pageHeight(doc) - 20) {
+    doc.addPage();
+    y = 26;
   }
+
+  doc.setFillColor(...CARD);
+  doc.setDrawColor(...BORDER);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(MARGIN, y, w, cardH, 4, 4, "FD");
+
+  const cx = MARGIN + pad + donutR + 3;
+  const cy = y + cardH / 2;
+  drawDonut(doc, cx, cy, donutR, score / 100);
+
+  setFontSafe(doc, "DMSans", "bold");
+  doc.setFontSize(12.5);
+  doc.setTextColor(...DARK);
+  doc.text(String(score), cx, cy + 1.4, { align: "center" });
+  setFontSafe(doc, "DMSansSemi");
+  doc.setFontSize(5.8);
+  doc.setTextColor(...MUTED);
+  doc.text(tag.toUpperCase(), cx, cy - 4.4, { align: "center" });
+
+  const tx = cx + donutR + 9;
+  const avail = w - (tx - MARGIN) - pad;
+  let ty = y + pad + 3;
+  setFontSafe(doc, "DMSansSemi");
+  doc.setFontSize(10.5);
+  doc.setTextColor(...DARK);
+  const labelLines = doc.splitTextToSize(label, avail) as string[];
+  for (const ll of labelLines) {
+    doc.text(ll, tx, ty);
+    ty += 4.6;
+  }
+  if (sub) {
+    ty += 1.6;
+    setFontSafe(doc, "DMSans");
+    doc.setFontSize(8);
+    doc.setTextColor(...MUTED);
+    const subLines = doc.splitTextToSize(sub, avail) as string[];
+    for (const sl of subLines) {
+      doc.text(sl, tx, ty);
+      ty += 3.8;
+    }
+  }
+
+  return y + cardH + 8;
+}
+
+/**
+ * Humanize (AI vs human) report card rendered on the article cover page below
+ * the title. Shows the AI/Human split, the verdict pill, and the reason from
+ * the assessment so a downloaded PDF reads as a finished editorial report.
+ */
+function humanizeCard(doc: jsPDF, y: number, h: HumanizeData): number {
+  const w = contentWidth(doc);
+  const pad = 6;
+  const ai = Math.max(0, Math.min(100, h.aiPercent));
+  const human = Math.max(0, Math.min(100, h.humanPercent));
+  const notes = (h.notes || "").trim();
+  const verdict = String(h.verdict || "");
+
+  setFontSafe(doc, "DMSans");
+  doc.setFontSize(8.5);
+  const noteLines = notes ? (doc.splitTextToSize(notes, w - pad * 2) as string[]) : [];
+
+  const barH = 4.2;
+  const cardH = pad + 3.4 + 3 + barH + 3.4 + (noteLines.length ? 5 + noteLines.length * 3.9 : 0) + pad;
+
+  if (y + cardH + 8 > pageHeight(doc) - 20) {
+    doc.addPage();
+    y = 22;
+  }
+
+  doc.setFillColor(...CARD);
+  doc.setDrawColor(...BORDER);
+  doc.setLineWidth(0.3);
+  doc.roundedRect(MARGIN, y, w, cardH, 4, 4, "FD");
+
+  let yy = y + pad;
+
+  // Header row: label left, verdict pill right.
+  setFontSafe(doc, "DMSansSemi");
+  doc.setFontSize(6.8);
+  doc.setTextColor(...MUTED);
+  doc.text("HUMANIZE REPORT", MARGIN + pad, yy);
+  if (verdict) {
+    const [pillBg, pillFg] = ai > 60 ? STATUS_TONES.Cancel : ai >= 30 ? STATUS_TONES.Process : STATUS_TONES.Done;
+    const pillW = doc.getTextWidth(verdict) + 7;
+    const pillH = 5;
+    doc.setFillColor(...pillBg);
+    doc.roundedRect(MARGIN + w - pad - pillW, yy - pillH + 1, pillW, pillH, 2.5, 2.5, "F");
+    setFontSafe(doc, "DMSansSemi");
+    doc.setFontSize(7.2);
+    doc.setTextColor(...pillFg);
+    doc.text(verdict, MARGIN + w - pad - pillW / 2, yy + 0.4, { align: "center" });
+  }
+
+  // AI / Human split bar.
+  yy += 3.4;
+  const barX = MARGIN + pad;
+  const barW = w - pad * 2;
+  const aiW = (barW * ai) / 100;
+  doc.setFillColor(...SEP);
+  doc.roundedRect(barX, yy, barW, barH, barH / 2, barH / 2, "F");
+  if (ai > 0.5) {
+    doc.setFillColor(...DANGER);
+    doc.roundedRect(barX, yy, aiW, barH, barH / 2, barH / 2, "F");
+  }
+  if (human > 0.5 && human < 100) {
+    doc.setFillColor(...STATUS_TONES.Done[1]);
+    doc.roundedRect(barX + aiW, yy, (barW * human) / 100, barH, barH / 2, barH / 2, "F");
+  }
+
+  yy += barH + 3.2;
+  setFontSafe(doc, "DMSansSemi");
+  doc.setFontSize(7.6);
+  doc.setTextColor(...DANGER);
+  doc.text(`AI ${ai}%`, barX, yy);
+  setFontSafe(doc, "DMSansSemi");
+  doc.setTextColor(...STATUS_TONES.Done[1]);
+  doc.text(`Human ${human}%`, barX + barW, yy, { align: "right" });
+
+  if (noteLines.length) {
+    yy += 5.4;
+    setFontSafe(doc, "DMSans");
+    doc.setFontSize(8.5);
+    doc.setTextColor(...BODY);
+    for (const nl of noteLines) {
+      doc.text(nl, MARGIN + pad, yy);
+      yy += 3.9;
+    }
+  }
+
+  return y + cardH + 8;
 }
 
 /**
  * Builds an article PDF. When `seo`/`swot` are provided they are appended as
  * an SEO/SWOT report section on a new page.
  */
-export async function buildArticlePdf(article: Pick<SeoArticle, "title" | "content" | "createdAt"> & { keyword?: string }, seo?: SeoData | null, swot?: SwotData | null): Promise<jsPDF> {
+export async function buildArticlePdf(article: Pick<SeoArticle, "title" | "content" | "createdAt"> & { keyword?: string; humanize?: HumanizeData | null }, seo?: SeoData | null, swot?: SwotData | null): Promise<jsPDF> {
   refreshTheme();
   const doc = new jsPDF();
   await ensureFonts(doc);
@@ -844,6 +955,12 @@ export async function buildArticlePdf(article: Pick<SeoArticle, "title" | "conte
   for (const line of titleLines) {
     doc.text(line, MARGIN, y);
     y += 11;
+  }
+
+  // AI vs human check on the cover — makes the download a "report" with value.
+  if (article.humanize) {
+    y += 9;
+    y = humanizeCard(doc, y, article.humanize);
   }
 
   // ---- Content ----
@@ -989,32 +1106,8 @@ export async function buildArticlePdf(article: Pick<SeoArticle, "title" | "conte
       y += 16;
     }
 
-    // Score donut — Chart.js image when available, manual fallback otherwise.
-    const cx = MARGIN + 26;
-    const cy = y + 26;
-    const chartUrl = await chartDonutDataUrl(seo.score);
-    if (chartUrl) {
-      doc.addImage(chartUrl, "PNG", cx - 17, cy - 17, 34, 34);
-    } else {
-      drawDonut(doc, cx, cy, 18, seo.score / 100);
-    }
-    setFontSafe(doc, "DMSans", "bold");
-    doc.setFontSize(18);
-    doc.setTextColor(...DARK);
-    doc.text(`${seo.score}`, cx, cy + 1);
-    setFontSafe(doc, "DMSansSemi");
-    doc.setFontSize(8);
-    doc.setTextColor(...MUTED);
-    doc.text("/100", cx + 14, cy + 1);
-    setFontSafe(doc, "DMSansSemi");
-    doc.setFontSize(8.5);
-    doc.setTextColor(...DARK);
-    doc.text("Estimated SEO score", cx + 38, cy - 2);
-    setFontSafe(doc, "DMSans");
-    doc.setFontSize(8);
-    doc.setTextColor(...MUTED);
-    doc.text("based on title, description, structure", cx + 38, cy + 4);
-    y += 56;
+    // Score gauge card.
+    y = scoreGaugeCard(doc, y, seo.score, "SEO", "Estimated SEO score", "based on title, description, structure");
 
     // Metric bars.
     const bar = (label: string, value: number, max: number, unit: string) => {
@@ -1091,32 +1184,8 @@ export async function buildArticlePdf(article: Pick<SeoArticle, "title" | "conte
     doc.text("SWOT Analysis", MARGIN, y);
     y += 16;
 
-    // Score donut — Chart.js image when available, manual fallback otherwise.
-    const cx = MARGIN + 26;
-    const cy = y + 26;
-    const chartUrl = await chartDonutDataUrl(swot.seoScore);
-    if (chartUrl) {
-      doc.addImage(chartUrl, "PNG", cx - 17, cy - 17, 34, 34);
-    } else {
-      drawDonut(doc, cx, cy, 18, swot.seoScore / 100);
-    }
-    setFontSafe(doc, "DMSans", "bold");
-    doc.setFontSize(18);
-    doc.setTextColor(...DARK);
-    doc.text(`${swot.seoScore}`, cx, cy + 1);
-    setFontSafe(doc, "DMSansSemi");
-    doc.setFontSize(8);
-    doc.setTextColor(...MUTED);
-    doc.text("/100", cx + 14, cy + 1);
-    setFontSafe(doc, "DMSansSemi");
-    doc.setFontSize(8.5);
-    doc.setTextColor(...DARK);
-    doc.text("Estimated SEO score", cx + 38, cy - 2);
-    setFontSafe(doc, "DMSans");
-    doc.setFontSize(8);
-    doc.setTextColor(...MUTED);
-    doc.text("from the SWOT analysis", cx + 38, cy + 4);
-    y += 56;
+    // Score gauge card.
+    y = scoreGaugeCard(doc, y, swot.seoScore, "SWOT", "SWOT strength score", "based on the SWOT analysis");
 
     // SWOT as plain sections with bullets — no colored cards.
     const section = (label: string, items: string[]) => {
