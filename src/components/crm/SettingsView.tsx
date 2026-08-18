@@ -178,10 +178,11 @@ function AiSection({ onToast }: { onToast: (message: string) => void }) {
       const parts = value.split(/\r?\n/).map((s) => s.trim());
       const next = [...prev];
       next[index] = parts[0] ?? "";
-      // Auto-expand when typing into the last slot, or when pasting
-      // multiple lines (max 5).
-      const wantEmptyTail = next.length < 5 && (next[next.length - 1]?.trim() !== "" || parts.length > 1);
-      if (wantEmptyTail) {
+      // Auto-expand: when typing/pasting into the last slot and it becomes
+      // non-empty, append a fresh empty slot (max 5). Pasting multiple lines
+      // inserts the extra lines after this slot.
+      const typedLast = index === prev.length - 1 && parts[0] !== "";
+      if (typedLast && next.length < 5) {
         next.push("");
       }
       for (let i = 1; i < parts.length && next.length < 5; i++) {
@@ -257,7 +258,7 @@ function AiSection({ onToast }: { onToast: (message: string) => void }) {
           ))}
         </div>
 
-        {filledKeys.length === 0 && keys.length < 5 && (
+        {keys.length < 5 && (
           <button onClick={() => setKeys((prev) => [...prev, ""])} disabled={keys.length >= 5} className="flex items-center gap-1.5 rounded-lg border border-dashed border-(--crm-border-input) px-3 py-2 text-xs font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover) disabled:cursor-not-allowed disabled:opacity-50"><Plus size={14} />Add API key slot</button>
         )}
 
