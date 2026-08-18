@@ -163,7 +163,7 @@ function AiSection({ onToast }: { onToast: (message: string) => void }) {
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const keyConfigured = settings.hasGeminiKey;
-  const filledKeys = keys.map((k) => k.trim()).filter(Boolean);
+  const filledKeys = keys.flatMap((k) => k.split(/\r?\n/).map((s) => s.trim()).filter(Boolean));
   const changed = filledKeys.length > 0;
   const hasDuplicate = new Set(filledKeys).size !== filledKeys.length;
 
@@ -174,8 +174,18 @@ function AiSection({ onToast }: { onToast: (message: string) => void }) {
   function removeKey(index: number) {
     setKeys((prev) => prev.filter((_, i) => i !== index));
   }
+  /** Set one row's value; pasting multiple lines auto-expands into separate rows. */
   function setKey(index: number, value: string) {
-    setKeys((prev) => prev.map((k, i) => (i === index ? value : k)));
+    const parts = value.split(/\r?\n/);
+    setKeys((prev) => {
+      const next = [...prev];
+      next[index] = parts[0];
+      // Insert any additional pasted lines after this row (max 5 total).
+      for (let i = 1; i < parts.length && next.length < 5; i++) {
+        next.splice(index + i, 0, parts[i]);
+      }
+      return next.slice(0, 5);
+    });
   }
 
   async function saveKey() {
