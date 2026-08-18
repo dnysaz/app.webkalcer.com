@@ -1,23 +1,9 @@
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
-import { query } from "@/lib/db";
 import { requireAuth } from "@/lib/auth";
 import { setupDatabase } from "@/lib/setup";
-import { SETTINGS_ROW_ID } from "@/lib/settings";
-
-type SettingsRow = { gemini_api_key: string };
-
-/** Gemini models used for PRD generation, tried in order.
- *  Google occasionally returns 503 "high demand" for a given model, so we
- *  fall back to the next one. Override the whole list via GEMINI_MODEL env
- *  (comma-separated, e.g. "gemini-3.6-flash,gemini-flash-latest"). */
-const GEMINI_MODELS = (process.env.GEMINI_MODEL || "gemini-3.6-flash,gemini-flash-latest")
-  .split(",")
-  .map((m) => m.trim())
-  .filter(Boolean);
-const GEMINI_ENDPOINT = (apiKey: string, model: string) =>
-  `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+import { callGemini } from "@/lib/gemini";
 
 export interface PrdFormData {
   projectName: string;
@@ -112,11 +98,6 @@ export async function POST(request: Request) {
 
     // API key: settings row first, then env fallback.
     await setupDatabase();
-    const rows = await query<SettingsRow>`SELECT gemini_api_key FROM settings WHERE id = ${SETTINGS_ROW_ID} LIMIT 1`;
-    const apiKey = rows[0]?.gemini_api_key || process.env.GEMINI_API_KEY || "";
-    if (!apiKey) {
-      return NextResponse.json({ error: "Gemini API key is not configured. Add it in Settings → AI · API keys." }, { status: 400 });
-    }
 
     const form: PrdFormData = {
       projectName: (body.projectName || "").trim(),
@@ -146,50 +127,14 @@ export async function POST(request: Request) {
       buildBrief(form),
     ].join("\n");
 
-    let data: {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    } = {};
-    let lastError = "";
-    for (const model of GEMINI_MODELS) {
-      const res = await fetch(GEMINI_ENDPOINT(apiKey, model), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-          generationConfig: { temperature: 0.7, maxOutputTokens: 8192 },
-        }),
-      });
-
-      if (res.ok) {
-        data = (await res.json()) as typeof data;
-        lastError = "";
-        break;
-      }
-
-      const detail = await res.text().catch(() => "");
-      lastError = detail.slice(0, 500);
-      console.error(`Gemini API error (${model}):`, res.status, lastError);
-      // Non-transient errors (bad key, model disabled) won't be fixed by
-      // retrying another model — fail fast.
-      if (res.status === 400 || res.status === 403) {
-        return NextResponse.json({ error: "Gemini rejected the request. Check that the API key is valid and the model is enabled." }, { status: 502 });
-      }
+    let text: string;
+    try {
+      text = await callGemini({ systemPrompt: SYSTEM_PROMPT, userPrompt, temperature: 0.7, maxOutputTokens: 8192 });
+    } catch (aiErr) {
+      return NextResponse.json({ error: aiErr instanceof Error ? aiErr.message : "The AI service returned an error. Please try again." }, { status: 502 });
     }
 
-    if (!lastError && !data.candidates?.length) {
-      lastError = "empty response";
-    }
-    if (lastError) {
-      return NextResponse.json({ error: "The AI service returned an error. Please try again." }, { status: 502 });
-    }
-
-    const text = data.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("") || "";
-    if (!text.trim()) {
-      return NextResponse.json({ error: "The AI returned an empty response. Please try again." }, { status: 502 });
-    }
-
-    return NextResponse.json({ markdown: text.trim() });
+    return NextResponse.json({ markdown: text });
   } catch (error) {
     console.error("PRD generation failed:", error);
     return NextResponse.json({ error: "Something went wrong while generating the PRD." }, { status: 500 });
