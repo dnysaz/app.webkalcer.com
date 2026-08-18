@@ -126,12 +126,15 @@ export function ContactBookView() {
   }
 
   const query = search.trim().toLowerCase();
-  const visible = contacts.filter((c) => {
-    if (filter === "yes" && !c.hasWeb) return false;
-    if (filter === "no" && c.hasWeb) return false;
-    if (!query) return true;
-    return `${c.name} ${c.phone}`.toLowerCase().includes(query);
-  });
+  const visible = contacts
+    .filter((c) => {
+      if (filter === "yes" && !c.hasWeb) return false;
+      if (filter === "no" && c.hasWeb) return false;
+      if (!query) return true;
+      return `${c.name} ${c.phone}`.toLowerCase().includes(query);
+    })
+    // Contacts with a note first, then the rest.
+    .sort((a, b) => Number(!b.note) - Number(!a.note));
 
   const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);

@@ -82,25 +82,29 @@ export async function POST(request: Request) {
 }
 
 /**
- * Updates a contact: note text and/or website ownership (hasWeb).
- * Body: { id, note?, hasWeb? } — at least one field must be present.
+ * Updates a contact: name/phone, note text and/or website ownership (hasWeb).
+ * Body: { id, name?, phone?, note?, hasWeb? } — at least one field must be present.
  */
 export async function PATCH(request: Request) {
   if (!(await requireAuth())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    const body = (await request.json()) as { id?: string; note?: string; hasWeb?: boolean };
+    const body = (await request.json()) as { id?: string; name?: string; phone?: string; note?: string; hasWeb?: boolean };
     if (!body.id) {
       return NextResponse.json({ error: "id is required." }, { status: 400 });
     }
     const sql = getSql();
 
+    const name = typeof body.name === "string" ? body.name.trim().slice(0, 200) : undefined;
+    const phone = typeof body.phone === "string" ? body.phone.trim().slice(0, 40) : undefined;
     const note = typeof body.note === "string" ? body.note.trim().slice(0, 500) : undefined;
     const hasWeb = typeof body.hasWeb === "boolean" ? body.hasWeb : undefined;
-    if (note === undefined && hasWeb === undefined) {
+    if (name === undefined && phone === undefined && note === undefined && hasWeb === undefined) {
       return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
     }
     await sql`
       UPDATE contacts SET
+        name = COALESCE(${name ?? null}, name),
+        phone = COALESCE(${phone ?? null}, phone),
         note = COALESCE(${note ?? null}, note),
         has_web = COALESCE(${hasWeb ?? null}, has_web)
       WHERE id = ${body.id}`;
