@@ -145,7 +145,6 @@ export function ContactBookView() {
       <div className="crm-rise flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <h2 className="text-[26px] font-semibold tracking-[-.04em]">Contact Book</h2>
-          <p className="mt-1 text-sm text-(--crm-secondary)">Upload a CSV or vCard (.vcf) file — e.g. exported from Google Contacts on Android — to build your contact list, then track whether each contact has a website.</p>
         </div>
         <input ref={fileRef} type="file" accept=".csv,text/csv,.vcf,.vcard,text/vcard" className="hidden" onChange={(e) => void handleFile(e.target.files?.[0])} />
         <button onClick={() => fileRef.current?.click()} disabled={busy} className="flex items-center justify-center gap-2 rounded-xl bg-(--crm-primary) px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-(--crm-dark) hover:shadow-md disabled:cursor-not-allowed disabled:opacity-60"><UploadCloud size={16} />{busy ? "Importing..." : "Upload CSV / vCard"}</button>
