@@ -6,6 +6,7 @@ import { requireAuth } from "@/lib/auth";
 import { setupDatabase } from "@/lib/setup";
 import { DEFAULT_SETTINGS, FONT_SIZES, SETTINGS_ROW_ID, THEMES } from "@/lib/settings";
 import type { FontSizeKey, ThemeKey } from "@/lib/settings";
+import { parseGeminiKeys } from "@/lib/gemini";
 
 type SettingsRow = { site_name: string; theme: string; font_size: string; gemini_api_key: string };
 
@@ -19,6 +20,7 @@ export async function GET() {
       fontSize: row?.font_size && FONT_SIZES[row.font_size as FontSizeKey] ? (row.font_size as FontSizeKey) : DEFAULT_SETTINGS.fontSize,
       // Never send the raw key to the browser — only whether one is configured.
       hasGeminiKey: !!row?.gemini_api_key,
+      geminiKeyCount: parseGeminiKeys(row?.gemini_api_key ?? "").length,
     });
   } catch (error) {
     // Table may not exist yet on a brand-new DB (schema is created by
@@ -52,6 +54,7 @@ export async function PATCH(request: Request) {
     await setupDatabase();
     const rows = await query<SettingsRow>`SELECT site_name, theme, font_size, gemini_api_key FROM settings WHERE id = ${SETTINGS_ROW_ID} LIMIT 1`;
     const current = rows[0];
+    const geminiKeyCount = parseGeminiKeys(geminiApiKey ?? current?.gemini_api_key ?? "").length;
     const sql = getSql();
     await sql`
       INSERT INTO settings (id, site_name, theme, font_size, gemini_api_key, updated_at)
@@ -68,6 +71,7 @@ export async function PATCH(request: Request) {
       theme: theme ?? current?.theme ?? DEFAULT_SETTINGS.theme,
       fontSize: fontSize ?? current?.font_size ?? DEFAULT_SETTINGS.fontSize,
       hasGeminiKey: geminiApiKey !== undefined ? !!geminiApiKey.trim() : !!current?.gemini_api_key,
+      geminiKeyCount,
     });
   } catch (error) {
     console.error("Update settings failed:", error);

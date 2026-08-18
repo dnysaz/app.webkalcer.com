@@ -128,6 +128,8 @@ export interface SiteSettings {
    * The raw key is never sent to the browser.
    */
   hasGeminiKey: boolean;
+  /** Number of Gemini API keys currently stored server-side. */
+  geminiKeyCount: number;
 }
 
 export const DEFAULT_SETTINGS: SiteSettings = {
@@ -135,6 +137,7 @@ export const DEFAULT_SETTINGS: SiteSettings = {
   theme: "emerald",
   fontSize: "md",
   hasGeminiKey: false,
+  geminiKeyCount: 0,
 };
 
 export const SETTINGS_ROW_ID = "site";

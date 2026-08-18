@@ -159,12 +159,13 @@ function WebsiteSection({ onToast }: { onToast: (message: string) => void }) {
 
 function AiSection({ onToast }: { onToast: (message: string) => void }) {
   const { settings, updateSettings } = useSettings();
-  const [keys, setKeys] = useState<string[]>([""]);
+  const [keys, setKeys] = useState<string[]>(() => Array.from({ length: Math.max(1, settings.geminiKeyCount) }, () => ""));
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const keyConfigured = settings.hasGeminiKey;
   const filledKeys = keys.map((k) => k.trim()).filter(Boolean);
   const changed = filledKeys.length > 0;
+  const hasDuplicate = new Set(filledKeys).size !== filledKeys.length;
 
   function addKey() {
     if (keys.length >= 5) return;
@@ -178,11 +179,15 @@ function AiSection({ onToast }: { onToast: (message: string) => void }) {
   }
 
   async function saveKey() {
+    if (hasDuplicate) {
+      onToast("Duplicate API keys detected — each key must be unique.");
+      return;
+    }
     const value = filledKeys.join("\n");
     setBusy(true);
     try {
       await updateSettings({ geminiApiKey: value });
-      setKeys([""]);
+      setKeys(Array.from({ length: Math.max(1, filledKeys.length) }, () => ""));
       onToast(value ? `${filledKeys.length} Gemini API key${filledKeys.length > 1 ? "s" : ""} saved.` : "Gemini API key cleared.");
     } catch (err) {
       onToast(err instanceof Error ? err.message : "Failed to save API key.");
@@ -215,8 +220,9 @@ function AiSection({ onToast }: { onToast: (message: string) => void }) {
         <div className="flex flex-wrap gap-2">
           <button onClick={addKey} disabled={keys.length >= 5} className="flex items-center gap-1.5 rounded-lg border border-(--crm-border-input) px-3 py-2 text-xs font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover) disabled:cursor-not-allowed disabled:opacity-50"><Plus size={14} />Add API key ({keys.length}/5)</button>
           <button onClick={() => setShow((prev) => !prev)} className="flex items-center gap-1.5 rounded-lg border border-(--crm-border-input) px-3 py-2 text-xs font-semibold text-(--crm-secondary) transition-colors hover:bg-(--crm-hover)" title={show ? "Hide keys" : "Show keys"} aria-label={show ? "Hide keys" : "Show keys"}>{show ? <EyeOff size={14} /> : <Eye size={14} />}{show ? "Hide" : "Show"}</button>
-          <button onClick={() => void saveKey()} disabled={busy || (!changed && !keyConfigured)} className="flex items-center gap-1.5 rounded-lg bg-(--crm-primary) px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-(--crm-dark) disabled:cursor-not-allowed disabled:opacity-60"><KeyRound size={14} />{busy ? "Saving…" : changed ? "Save keys" : "Clear"}</button>
+          <button onClick={() => void saveKey()} disabled={busy || hasDuplicate || (!changed && !keyConfigured)} className="flex items-center gap-1.5 rounded-lg bg-(--crm-primary) px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-(--crm-dark) disabled:cursor-not-allowed disabled:opacity-60"><KeyRound size={14} />{busy ? "Saving…" : changed ? "Save keys" : "Clear"}</button>
         </div>
+        {hasDuplicate && <p className="text-[11px] font-semibold text-(--crm-danger)">Duplicate API keys detected — each key must be unique.</p>}
         <p className="text-[11px] leading-5 text-(--crm-muted)">Get free keys at <span className="font-mono text-(--crm-brand)">aistudio.google.com/apikey</span>. Separate each key with a new line — up to 5 keys. When one key hits a rate limit or error, the next key is used automatically. Keys are stored securely in the database, never sent to the browser.</p>
         <p className="text-[11px] leading-5 text-(--crm-muted)">Status: <span className={`font-semibold ${keyConfigured ? "text-(--crm-mid)" : "text-(--crm-danger)"}`}>{keyConfigured ? "API keys configured" : "No API key configured"}</span></p>
       </div>
