@@ -156,6 +156,16 @@ export type SwotData = {
   summary: string;
 };
 
+/** AI-vs-human writing assessment generated for an article. */
+export type HumanizeData = {
+  /** Estimated % of AI-generated text (0-100). */
+  aiPercent: number;
+  /** Estimated % of human-written text (0-100). */
+  humanPercent: number;
+  verdict: string;
+  notes: string;
+};
+
 /** Content & SEO — an AI-generated article with optional SEO/SWOT results. */
 export type SeoArticle = {
   id: string;
@@ -166,6 +176,7 @@ export type SeoArticle = {
   links: string;
   seo: SeoData | null;
   swot: SwotData | null;
+  humanize: HumanizeData | null;
   /** Admin verification flag — once verified the AI output is accepted. */
   verified: boolean;
   createdAt: string;

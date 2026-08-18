@@ -20,13 +20,14 @@ import {
 import { CrmShell } from "@/components/CrmShell";
 import { ConfirmModal } from "@/components/crm/ConfirmModal";
 import { RightDrawer } from "@/components/crm/RightDrawer";
-import type { ArticleLength, SeoArticle, SeoData, SwotData } from "@/lib/crm";
+import type { ArticleLength, HumanizeData, SeoArticle, SeoData, SwotData } from "@/lib/crm";
 import { formatDate, uid } from "@/lib/crm";
 import { buildArticlePdf, downloadPdf } from "@/lib/pdf";
 import type { ArticleFormData } from "@/app/api/seo/article/route";
 import type { ArticleStyle } from "@/app/api/seo/article/route";
 import type { SeoGenResult } from "@/app/api/seo/optimize/route";
 import type { SwotResult } from "@/app/api/seo/swot/route";
+import type { HumanizeResult } from "@/app/api/seo/humanize/route";
 
 type TabKey = "article" | "seo" | "swot";
 
@@ -66,6 +67,7 @@ export function ContentSeoView() {
   const [saving, setSaving] = useState<string | null>(null);
   const [verifyTarget, setVerifyTarget] = useState<SeoArticle | null>(null);
   const [detail, setDetail] = useState<SeoArticle | null>(null);
+  const [humanizeBusy, setHumanizeBusy] = useState<string | null>(null);
   const [draftMode, setDraftMode] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -165,6 +167,7 @@ export function ContentSeoView() {
         links: draft.links,
         seo: null,
         swot: null,
+        humanize: null,
         verified: false,
         createdAt: now,
         updatedAt: now,
@@ -285,6 +288,41 @@ export function ContentSeoView() {
     setSwotArticleId(id);
     setSwotResult(id ? (sortedArticles.find((a) => a.id === id)?.swot ?? null) : null);
     setError("");
+  }
+
+  async function runHumanize(article: SeoArticle) {
+    setError("");
+    setHumanizeBusy(article.id);
+    try {
+      const res = await fetch("/api/seo/humanize", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: article.title, content: article.content }),
+      });
+      const data = (await res.json()) as HumanizeResult & { error?: string };
+      if (!res.ok) throw new Error(data.error || "Failed to assess the article.");
+      const humanize: HumanizeData = {
+        aiPercent: data.aiPercent,
+        humanPercent: data.humanPercent,
+        verdict: data.verdict,
+        notes: data.notes,
+      };
+      setArticles((all) => all.map((a) => (a.id === article.id ? { ...a, humanize } : a)));
+      try {
+        await fetch(`/api/seo/articles/${article.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ humanize }),
+        });
+      } catch {
+        // keep local state
+      }
+      announce("Humanize score generated");
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Something went wrong. Please try again.");
+    } finally {
+      setHumanizeBusy(null);
+    }
   }
 
   async function toggleVerify(article: SeoArticle) {
@@ -667,7 +705,10 @@ export function ContentSeoView() {
             </>
           }
         >
-          <ArticleDetailBody article={detail} />
+          <HumanizeCard article={detail} busy={humanizeBusy === detail.id} onAssess={() => void runHumanize(detail)} />
+          <div className="mt-4">
+            <ArticleDetailBody article={detail} />
+          </div>
         </RightDrawer>
       )}
 
@@ -675,6 +716,7 @@ export function ContentSeoView() {
         <ConfirmModal
           title={verifyTarget.verified ? "Remove verification?" : "Verify this article?"}
           message={verifyTarget.verified ? "The article will be marked as unverified." : "Confirm that you have checked the AI output and accept it."}
+          confirmLabel={verifyTarget.verified ? "Remove" : "Verify"}
           onClose={() => setVerifyTarget(null)}
           onConfirm={() => void toggleVerify(verifyTarget)}
         />
@@ -747,6 +789,42 @@ function ArticleMarkdown({ content }: { content: string }) {
           .replace(/\n/g, " ");
         return <p key={i} className="text-sm leading-7 text-(--crm-body)" dangerouslySetInnerHTML={{ __html: html }} />;
       })}
+    </div>
+  );
+}
+
+/** AI-vs-Human writing assessment card — shown at the top of the detail drawer. */
+function HumanizeCard({ article, busy, onAssess }: { article: SeoArticle; busy: boolean; onAssess: () => void }) {
+  const h = article.humanize;
+  return (
+    <div className="rounded-2xl border border-(--crm-border) bg-(--crm-panel) p-4 sm:p-5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h4 className="text-sm font-semibold tracking-[-.01em]">Humanize score</h4>
+          <p className="mt-0.5 text-[11px] text-(--crm-muted)">Estimated % of AI-generated vs human-written text.</p>
+        </div>
+        <button onClick={onAssess} disabled={busy} className="flex items-center gap-1.5 rounded-xl border border-(--crm-border-input) px-3 py-2 text-xs font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover) disabled:cursor-not-allowed disabled:opacity-60">
+          {busy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}{h ? "Re-assess" : "Assess article"}
+        </button>
+      </div>
+      {busy ? (
+        <div className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-(--crm-surface) py-8 text-xs font-medium text-(--crm-secondary)"><Loader2 size={16} className="animate-spin text-(--crm-mid)" />Analyzing writing style…</div>
+      ) : h ? (
+        <div className="mt-4">
+          <div className="flex h-3 w-full overflow-hidden rounded-full bg-(--crm-soft)">
+            <div className="h-full bg-(--crm-danger)" style={{ width: `${h.aiPercent}%` }} />
+            <div className="h-full bg-(--crm-st-done-text)" style={{ width: `${h.humanPercent}%` }} />
+          </div>
+          <div className="mt-2 flex items-center justify-between text-[11px] font-semibold">
+            <span className="text-(--crm-danger)">AI {h.aiPercent}%</span>
+            <span className="text-(--crm-st-done-text)">Human {h.humanPercent}%</span>
+          </div>
+          {h.verdict && <p className="mt-3 rounded-xl bg-(--crm-soft) px-3 py-2 text-xs font-semibold text-(--crm-text)">{h.verdict}</p>}
+          {h.notes && <p className="mt-2 text-xs leading-5 text-(--crm-body)">{h.notes}</p>}
+        </div>
+      ) : (
+        <p className="mt-4 rounded-xl border border-dashed border-(--crm-border) bg-(--crm-surface) px-3 py-4 text-center text-xs text-(--crm-muted)">Belum dinilai — klik Assess article untuk melihat estimasi persentase AI vs Human.</p>
+      )}
     </div>
   );
 }

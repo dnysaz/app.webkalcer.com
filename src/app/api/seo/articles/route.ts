@@ -28,8 +28,8 @@ export async function POST(request: Request) {
     const links = (body.links || "").slice(0, 5000);
 
     await sql`
-      INSERT INTO seo_articles (id, title, content, length, links, seo, swot, verified, created_at, updated_at)
-      VALUES (${id}, ${title}, ${content}, ${length}, ${links}, ${JSON.stringify(body.seo ?? null)}, ${JSON.stringify(body.swot ?? null)}, ${!!body.verified}, ${body.createdAt ?? now}, ${now})`;
+      INSERT INTO seo_articles (id, title, content, length, links, seo, swot, humanize, verified, created_at, updated_at)
+      VALUES (${id}, ${title}, ${content}, ${length}, ${links}, ${JSON.stringify(body.seo ?? null)}, ${JSON.stringify(body.swot ?? null)}, ${JSON.stringify(body.humanize ?? null)}, ${!!body.verified}, ${body.createdAt ?? now}, ${now})`;
 
     const article: SeoArticle = {
       id,
@@ -39,6 +39,7 @@ export async function POST(request: Request) {
       links,
       seo: body.seo ?? null,
       swot: body.swot ?? null,
+      humanize: body.humanize ?? null,
       verified: !!body.verified,
       createdAt: body.createdAt ?? now,
       updatedAt: now,

@@ -1,5 +1,5 @@
 import { neon } from "@neondatabase/serverless";
-import type { BankAccount, Contact, Customer, CustomerStatus, Invoice, InvoiceItem, InvoiceStatus, Note, PaymentSettings, Product, Quote, QuoteStatus, SeoArticle, SeoData, SwotData, WebAsset, WebAssetType } from "./crm";
+import type { BankAccount, Contact, Customer, CustomerStatus, HumanizeData, Invoice, InvoiceItem, InvoiceStatus, Note, PaymentSettings, Product, Quote, QuoteStatus, SeoArticle, SeoData, SwotData, WebAsset, WebAssetType } from "./crm";
 
 let _sql: ReturnType<typeof neon> | null = null;
 
@@ -117,6 +117,7 @@ export interface SeoArticleRow {
   links: string;
   seo: unknown | null;
   swot: unknown | null;
+  humanize: unknown | null;
   verified: boolean | null;
   created_at: Date | string;
   updated_at: Date | string;
@@ -275,6 +276,18 @@ function asSwotData(value: unknown): SwotData | null {
   };
 }
 
+function asHumanizeData(value: unknown): HumanizeData | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Partial<HumanizeData>;
+  if (typeof v.aiPercent !== "number") return null;
+  return {
+    aiPercent: Math.max(0, Math.min(100, v.aiPercent)),
+    humanPercent: typeof v.humanPercent === "number" ? Math.max(0, Math.min(100, v.humanPercent)) : 100 - v.aiPercent,
+    verdict: v.verdict ?? "",
+    notes: v.notes ?? "",
+  };
+}
+
 export function rowToSeoArticle(row: SeoArticleRow): SeoArticle {
   return {
     id: row.id,
@@ -284,6 +297,7 @@ export function rowToSeoArticle(row: SeoArticleRow): SeoArticle {
     links: row.links ?? "",
     seo: asSeoData(row.seo),
     swot: asSwotData(row.swot),
+    humanize: asHumanizeData(row.humanize),
     verified: !!row.verified,
     createdAt: toIso(row.created_at),
     updatedAt: toIso(row.updated_at),
