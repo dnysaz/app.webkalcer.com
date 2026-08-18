@@ -214,7 +214,7 @@ function AiSection({ onToast }: { onToast: (message: string) => void }) {
   }
 
   return (
-    <SectionCard icon={KeyRound} title="AI · PRD generator" description="Google Gemini API keys used to generate PRD prompts from the Create PRD page. Add up to 5 keys — if one fails, the next is tried automatically.">
+    <SectionCard icon={KeyRound} title="AI · API keys" description="Google Gemini API keys used to power all AI features — PRD generator, Content & SEO articles, SEO reports, SWOT analysis, and humanize scoring. Add up to 5 keys; if one hits a limit or fails, the next is used automatically.">
       <div className="space-y-3">
         <label className="block text-[10px] font-semibold uppercase tracking-[.12em] text-(--crm-label)">Gemini API keys</label>
         <div className="space-y-2">

@@ -115,7 +115,7 @@ export async function POST(request: Request) {
     const rows = await query<SettingsRow>`SELECT gemini_api_key FROM settings WHERE id = ${SETTINGS_ROW_ID} LIMIT 1`;
     const apiKey = rows[0]?.gemini_api_key || process.env.GEMINI_API_KEY || "";
     if (!apiKey) {
-      return NextResponse.json({ error: "Gemini API key is not configured. Add it in Settings → AI · PRD generator." }, { status: 400 });
+      return NextResponse.json({ error: "Gemini API key is not configured. Add it in Settings → AI · API keys." }, { status: 400 });
     }
 
     const form: PrdFormData = {

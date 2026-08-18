@@ -64,7 +64,7 @@ export interface GeminiCallOptions {
 export async function callGemini(options: GeminiCallOptions): Promise<string> {
   const keys = await getGeminiApiKeys();
   if (keys.length === 0) {
-    throw new Error("Gemini API key is not configured. Add it in Settings → AI · PRD generator.");
+    throw new Error("Gemini API key is not configured. Add it in Settings → AI · API keys.");
   }
 
   let lastError = "";
