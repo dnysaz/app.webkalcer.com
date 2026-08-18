@@ -22,6 +22,7 @@ import {
   QrCode,
   ScrollText,
   Settings,
+  Sparkles,
   Users,
   X,
 } from "lucide-react";
@@ -35,6 +36,7 @@ const navItems = [
   { label: "Products", href: "/products", icon: Package },
   { label: "Contact Book", href: "/contacts", icon: ContactRound },
   { label: "Domain & Hosting", href: "/web-assets", icon: Globe },
+  { label: "Content & SEO", href: "/content-seo", icon: Sparkles },
   { label: "Create PRD", href: "/prd", icon: BookOpenText },
   { label: "Notes", href: "/notes", icon: NotebookPen },
 ];

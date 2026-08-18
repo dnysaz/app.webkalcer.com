@@ -1,5 +1,5 @@
 import { neon } from "@neondatabase/serverless";
-import type { BankAccount, Contact, Customer, CustomerStatus, Invoice, InvoiceItem, InvoiceStatus, Note, PaymentSettings, Product, Quote, QuoteStatus, WebAsset, WebAssetType } from "./crm";
+import type { BankAccount, Contact, Customer, CustomerStatus, Invoice, InvoiceItem, InvoiceStatus, Note, PaymentSettings, Product, Quote, QuoteStatus, SeoArticle, SeoData, SwotData, WebAsset, WebAssetType } from "./crm";
 
 let _sql: ReturnType<typeof neon> | null = null;
 
@@ -107,6 +107,19 @@ export interface ContactRow {
   has_web: boolean | null;
   csv_url: string | null;
   created_at: Date | string;
+}
+
+export interface SeoArticleRow {
+  id: string;
+  title: string;
+  content: string;
+  length: string;
+  links: string;
+  seo: unknown | null;
+  swot: unknown | null;
+  verified: boolean | null;
+  created_at: Date | string;
+  updated_at: Date | string;
 }
 
 function toIso(value: Date | string | null | undefined): string {
@@ -226,5 +239,53 @@ export function rowToContact(row: ContactRow): Contact {
     hasWeb: !!row.has_web,
     csvUrl: row.csv_url ?? "",
     createdAt: toIso(row.created_at),
+  };
+}
+
+function asSeoData(value: unknown): SeoData | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Partial<SeoData>;
+  if (typeof v.title !== "string") return null;
+  return {
+    title: v.title ?? "",
+    description: v.description ?? "",
+    hashtags: Array.isArray(v.hashtags) ? v.hashtags.filter((h): h is string => typeof h === "string") : [],
+    preview: {
+      url: typeof v.preview?.url === "string" ? v.preview.url : "",
+      title: typeof v.preview?.title === "string" ? v.preview.title : "",
+      description: typeof v.preview?.description === "string" ? v.preview.description : "",
+    },
+    score: typeof v.score === "number" ? v.score : 0,
+    notes: v.notes ?? "",
+  };
+}
+
+function asSwotData(value: unknown): SwotData | null {
+  if (!value || typeof value !== "object") return null;
+  const v = value as Partial<SwotData>;
+  if (!Array.isArray(v.strengths)) return null;
+  const list = (x: unknown): string[] => (Array.isArray(x) ? x.filter((i): i is string => typeof i === "string") : []);
+  return {
+    strengths: list(v.strengths),
+    weaknesses: list(v.weaknesses),
+    opportunities: list(v.opportunities),
+    threats: list(v.threats),
+    seoScore: typeof v.seoScore === "number" ? v.seoScore : 0,
+    summary: v.summary ?? "",
+  };
+}
+
+export function rowToSeoArticle(row: SeoArticleRow): SeoArticle {
+  return {
+    id: row.id,
+    title: row.title,
+    content: row.content,
+    length: (row.length as SeoArticle["length"]) || "medium",
+    links: row.links ?? "",
+    seo: asSeoData(row.seo),
+    swot: asSwotData(row.swot),
+    verified: !!row.verified,
+    createdAt: toIso(row.created_at),
+    updatedAt: toIso(row.updated_at),
   };
 }
