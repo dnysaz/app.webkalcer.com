@@ -9,7 +9,7 @@ export const MAX_GEMINI_KEYS = 5;
 /** Gemini models used for AI generation, tried in order.
  *  If one model returns an error or is unavailable, the next is tried.
  *  Override the whole list via GEMINI_MODEL env var (comma-separated). */
-const GEMINI_MODELS = (process.env.GEMINI_MODEL || "gemini-3.6-flash,gemini-2.5-flash,gemini-1.5-flash")
+const GEMINI_MODELS = (process.env.GEMINI_MODEL || "gemini-3.6-flash,gemini-3.5-flash,gemini-3.1-flash-lite")
   .split(",")
   .map((m) => m.trim())
   .filter(Boolean);
@@ -67,10 +67,11 @@ export async function callGemini(options: GeminiCallOptions): Promise<string> {
   }
 
   let lastError = "";
+  let lastStatus = 0;
 
   // Strategy: try each model first across all keys before moving to the next
   // model. This avoids burning all keys on an unavailable model.
-  for (const model of GEMINI_MODELS) {
+  models: for (const model of GEMINI_MODELS) {
     for (const apiKey of keys) {
       const res = await fetch(GEMINI_ENDPOINT(apiKey, model), {
         method: "POST",
@@ -98,18 +99,28 @@ export async function callGemini(options: GeminiCallOptions): Promise<string> {
       }
 
       const detail = await res.text().catch(() => "");
-      lastError = detail.slice(0, 500);
+      lastError = detail.slice(0, 300);
+      lastStatus = res.status;
       const keyIdx = keys.indexOf(apiKey) + 1;
       console.error(`Gemini API error (model: ${model}, key: ${keyIdx}):`, res.status, lastError);
 
-      // 400/403 = key is invalid or model is disabled for this key — no point
+      // 403 = the Google Cloud project the key belongs to is denied
+      // (PERMISSION_DENIED). This is project-level: every key in the same
+      // project fails with the same status, so stop trying entirely.
+      if (res.status === 403) break models;
+
+      // 400 = key is invalid or model is disabled for this key — no point
       // trying other keys with the same model, skip to next model.
-      if (res.status === 400 || res.status === 403) break;
+      if (res.status === 400) break;
     }
   }
 
+  if (lastStatus === 403) {
+    throw new Error("Google has denied access to your Gemini API project (HTTP 403). Every key in that project is blocked — generate a new API key in Google AI Studio, or contact Google support.");
+  }
+
   if (lastError) {
-    throw new Error("The AI service returned an error on all API keys. Please check the keys or try again later.");
+    throw new Error(`The AI service returned an error on all API keys (HTTP ${lastStatus || "n/a"}). ${lastError}`);
   }
   throw new Error("The AI returned an empty response. Please try again.");
 }
