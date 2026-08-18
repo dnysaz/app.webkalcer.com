@@ -103,7 +103,8 @@ export interface ContactRow {
   id: string;
   name: string;
   phone: string;
-  status: string;
+  note: string | null;
+  has_web: boolean | null;
   csv_url: string | null;
   created_at: Date | string;
 }
@@ -221,7 +222,8 @@ export function rowToContact(row: ContactRow): Contact {
     id: row.id,
     name: row.name,
     phone: row.phone,
-    status: (row.status as Contact["status"]) || "new",
+    note: row.note ?? "",
+    hasWeb: !!row.has_web,
     csvUrl: row.csv_url ?? "",
     createdAt: toIso(row.created_at),
   };

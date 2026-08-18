@@ -3,13 +3,12 @@ import { NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 import { getSql, query, rowToContact } from "@/lib/db";
 import type { ContactRow } from "@/lib/db";
-import type { Contact, ContactStatus } from "@/lib/crm";
+import type { Contact } from "@/lib/crm";
 import { requireAuth } from "@/lib/auth";
 import { setupDatabase } from "@/lib/setup";
 import { uploadToR2 } from "@/lib/r2";
 import { callerId } from "@/lib/rate-limit";
 
-const VALID_STATUSES: ContactStatus[] = ["new", "reached", "unreachable"];
 const MAX_CSV_BYTES = 1024 * 1024; // 1 MB
 
 export async function GET() {
@@ -70,9 +69,9 @@ export async function POST(request: Request) {
     for (const row of parsed) {
       const id = `ct_${Date.now().toString(36)}${callerId().slice(0, 8)}`;
       await sql`
-        INSERT INTO contacts (id, name, phone, status, csv_url, created_at)
-        VALUES (${id}, ${row.name}, ${row.phone}, 'new', ${csvUrl}, ${now})`;
-      contacts.push({ id, name: row.name, phone: row.phone, status: "new", csvUrl, createdAt: now });
+        INSERT INTO contacts (id, name, phone, csv_url, created_at)
+        VALUES (${id}, ${row.name}, ${row.phone}, ${csvUrl}, ${now})`;
+      contacts.push({ id, name: row.name, phone: row.phone, note: "", hasWeb: false, csvUrl, createdAt: now });
     }
 
     return NextResponse.json({ contacts, count: contacts.length });
@@ -82,35 +81,28 @@ export async function POST(request: Request) {
   }
 }
 
-/** Updates a contact: status and/or name/phone (edit). */
+/**
+ * Updates a contact: note text and/or website ownership (hasWeb).
+ * Body: { id, note?, hasWeb? } — at least one field must be present.
+ */
 export async function PATCH(request: Request) {
   if (!(await requireAuth())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
-    const body = (await request.json()) as { id?: string; status?: string; name?: string; phone?: string };
+    const body = (await request.json()) as { id?: string; note?: string; hasWeb?: boolean };
     if (!body.id) {
       return NextResponse.json({ error: "id is required." }, { status: 400 });
     }
     const sql = getSql();
 
-    // Status-only update (checkbox toggles).
-    if (body.status !== undefined) {
-      if (!VALID_STATUSES.includes(body.status as ContactStatus)) {
-        return NextResponse.json({ error: "Invalid status." }, { status: 400 });
-      }
-      await sql`UPDATE contacts SET status = ${body.status} WHERE id = ${body.id}`;
-      return NextResponse.json({ ok: true });
-    }
-
-    // Edit update (name/phone).
-    const name = typeof body.name === "string" ? body.name.trim().slice(0, 200) : undefined;
-    const phone = typeof body.phone === "string" ? body.phone.trim().slice(0, 40) : undefined;
-    if (!name && !phone) {
+    const note = typeof body.note === "string" ? body.note.trim().slice(0, 500) : undefined;
+    const hasWeb = typeof body.hasWeb === "boolean" ? body.hasWeb : undefined;
+    if (note === undefined && hasWeb === undefined) {
       return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
     }
     await sql`
       UPDATE contacts SET
-        name = COALESCE(${name ?? null}, name),
-        phone = COALESCE(${phone ?? null}, phone)
+        note = COALESCE(${note ?? null}, note),
+        has_web = COALESCE(${hasWeb ?? null}, has_web)
       WHERE id = ${body.id}`;
     return NextResponse.json({ ok: true });
   } catch (error) {

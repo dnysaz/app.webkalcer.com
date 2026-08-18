@@ -154,10 +154,15 @@ async function runSetupDatabase() {
     id text PRIMARY KEY,
     name text NOT NULL,
     phone text NOT NULL,
-    status text NOT NULL DEFAULT 'new',
+    note text NOT NULL DEFAULT '',
+    has_web boolean NOT NULL DEFAULT false,
     csv_url text NOT NULL DEFAULT '',
     created_at timestamptz NOT NULL DEFAULT now()
   )`;
+  // Migrate the old status column (new/reached/unreachable) → note + has_web.
+  await sql`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS note text NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE contacts ADD COLUMN IF NOT EXISTS has_web boolean NOT NULL DEFAULT false`;
+  await sql`ALTER TABLE contacts DROP COLUMN IF EXISTS status`;
 
   await sql`UPDATE invoices SET status = CASE status
     WHEN 'Paid' THEN 'Done'
@@ -580,7 +585,7 @@ export interface DbCounts {
  * Serverless instances cache `setupPromise`; a version bump makes the next
  * call re-run the migration instead of serving the stale cache.
  */
-const SCHEMA_VERSION = 4;
+const SCHEMA_VERSION = 5;
 
 let setupPromise: Promise<DbCounts> | null = null;
 let setupVersion = 0;

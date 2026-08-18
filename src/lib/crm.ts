@@ -118,13 +118,14 @@ export type WebAsset = {
 };
 
 /** Contact book entry — name + phone imported from an uploaded CSV. */
-export type ContactStatus = "new" | "reached" | "unreachable";
-
 export type Contact = {
   id: string;
   name: string;
   phone: string;
-  status: ContactStatus;
+  /** Small note about this contact, e.g. web progress or follow-up. */
+  note: string;
+  /** Whether the contact already has a website. */
+  hasWeb: boolean;
   csvUrl: string;
   createdAt: string;
 };
