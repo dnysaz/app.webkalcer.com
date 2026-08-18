@@ -67,6 +67,9 @@ export function ContentSeoView() {
   const [saving, setSaving] = useState<string | null>(null);
   const [verifyTarget, setVerifyTarget] = useState<SeoArticle | null>(null);
   const [detail, setDetail] = useState<SeoArticle | null>(null);
+  const [editingArticle, setEditingArticle] = useState<SeoArticle | null>(null);
+  const [editForm, setEditForm] = useState<{ title: string; keyword: string; content: string }>({ title: "", keyword: "", content: "" });
+  const [savingEdit, setSavingEdit] = useState(false);
   const [humanizeBusy, setHumanizeBusy] = useState<string | null>(null);
   const [draftMode, setDraftMode] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -357,6 +360,46 @@ export function ContentSeoView() {
       announce("Failed to delete article");
     }
     setConfirmDelete(null);
+  }
+
+  function openEditArticle(article: SeoArticle) {
+    setEditingArticle(article);
+    setEditForm({ title: article.title, keyword: article.keyword, content: article.content });
+  }
+
+  async function saveArticleEdit() {
+    if (!editingArticle) return;
+    const title = editForm.title.trim();
+    const content = editForm.content.trim();
+    if (!title || !content) {
+      announce("Title and content are required");
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const now = new Date().toISOString();
+      const updated: SeoArticle = {
+        ...editingArticle,
+        title,
+        keyword: editForm.keyword.trim(),
+        content,
+        updatedAt: now,
+      };
+      const res = await fetch(`/api/seo/articles/${editingArticle.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, keyword: updated.keyword, content }),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      setArticles((all) => all.map((a) => (a.id === editingArticle.id ? updated : a)));
+      setDetail((d) => (d && d.id === editingArticle.id ? updated : d));
+      setEditingArticle(null);
+      announce("Article updated");
+    } catch {
+      announce("Failed to update article");
+    } finally {
+      setSavingEdit(false);
+    }
   }
 
   async function copyText(text: string, message: string) {
@@ -711,6 +754,7 @@ export function ContentSeoView() {
               <button onClick={() => void downloadArticlePdf(detail, detail.seo, detail.swot)} className="flex items-center gap-1.5 rounded-xl border border-(--crm-border-input) px-4 py-2.5 text-sm font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover)"><FileText size={15} />PDF</button>
               <button onClick={() => downloadText(detail.content, `${detail.title.replace(/[^a-z0-9-]+/gi, "-").toLowerCase().slice(0, 60)}.md`)} className="flex items-center gap-1.5 rounded-xl border border-(--crm-border-input) px-4 py-2.5 text-sm font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover)"><Download size={15} />.md</button>
               <div className="flex-1" />
+              <button onClick={() => openEditArticle(detail)} className="rounded-xl border border-(--crm-border-input) px-4 py-2.5 text-sm font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover)">Edit</button>
               <button onClick={() => setDetail(null)} className="rounded-xl border border-(--crm-border) px-4 py-2.5 text-sm font-semibold text-(--crm-secondary) transition-colors hover:bg-(--crm-hover)">Close</button>
             </>
           }
@@ -718,6 +762,36 @@ export function ContentSeoView() {
           <HumanizeCard article={detail} busy={humanizeBusy === detail.id} error={error} onAssess={() => void runHumanize(detail)} />
           <div className="mt-4">
             <ArticleDetailBody article={detail} />
+          </div>
+        </RightDrawer>
+      )}
+
+      {editingArticle && (
+        <RightDrawer
+          onClose={() => setEditingArticle(null)}
+          eyebrow="Edit article"
+          title={editingArticle.title}
+          widthClass="sm:w-[680px] lg:w-[760px]"
+          footer={
+            <>
+              <button onClick={() => setEditingArticle(null)} className="flex-1 rounded-xl border border-(--crm-border) py-2.5 text-sm font-semibold text-(--crm-secondary) transition-colors hover:bg-(--crm-hover)">Cancel</button>
+              <button onClick={() => void saveArticleEdit()} disabled={savingEdit} className="flex-1 rounded-xl bg-(--crm-primary) py-2.5 text-sm font-semibold text-white transition-colors hover:bg-(--crm-dark) disabled:cursor-not-allowed disabled:opacity-60">{savingEdit ? "Saving…" : "Save changes"}</button>
+            </>
+          }
+        >
+          <div className="space-y-4">
+            <div>
+              <Label>Title *</Label>
+              <input value={editForm.title} onChange={(e) => setEditForm((f) => ({ ...f, title: e.target.value }))} className={inputCls} />
+            </div>
+            <div>
+              <Label>Target keyword</Label>
+              <input value={editForm.keyword} onChange={(e) => setEditForm((f) => ({ ...f, keyword: e.target.value }))} className={inputCls} />
+            </div>
+            <div>
+              <Label>Content (Markdown) *</Label>
+              <textarea value={editForm.content} onChange={(e) => setEditForm((f) => ({ ...f, content: e.target.value }))} rows={18} className={`${areaCls} font-mono`} />
+            </div>
           </div>
         </RightDrawer>
       )}
