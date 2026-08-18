@@ -134,7 +134,7 @@ export function ContactBookView() {
       return `${c.name} ${c.phone}`.toLowerCase().includes(query);
     })
     // Contacts with a note first, then the rest.
-    .sort((a, b) => Number(!b.note) - Number(!a.note));
+    .sort((a, b) => Number(!a.note) - Number(!b.note));
 
   const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
