@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Eye, EyeOff, Globe, KeyRound, Lock, LogOut, Type, UserRound } from "lucide-react";
+import { Check, Eye, EyeOff, Globe, KeyRound, Lock, LogOut, Plus, Type, UserRound, X } from "lucide-react";
 import { CrmShell } from "@/components/CrmShell";
 import { useSettings } from "@/components/SettingsProvider";
 import { useAuth } from "@/components/AuthProvider";
@@ -159,19 +159,31 @@ function WebsiteSection({ onToast }: { onToast: (message: string) => void }) {
 
 function AiSection({ onToast }: { onToast: (message: string) => void }) {
   const { settings, updateSettings } = useSettings();
-  const [apiKey, setApiKey] = useState("");
+  const [keys, setKeys] = useState<string[]>([""]);
   const [show, setShow] = useState(false);
   const [busy, setBusy] = useState(false);
   const keyConfigured = settings.hasGeminiKey;
-  const changed = apiKey.trim().length > 0;
+  const filledKeys = keys.map((k) => k.trim()).filter(Boolean);
+  const changed = filledKeys.length > 0;
+
+  function addKey() {
+    if (keys.length >= 5) return;
+    setKeys((prev) => [...prev, ""]);
+  }
+  function removeKey(index: number) {
+    setKeys((prev) => prev.filter((_, i) => i !== index));
+  }
+  function setKey(index: number, value: string) {
+    setKeys((prev) => prev.map((k, i) => (i === index ? value : k)));
+  }
 
   async function saveKey() {
-    const value = apiKey.trim();
+    const value = filledKeys.join("\n");
     setBusy(true);
     try {
       await updateSettings({ geminiApiKey: value });
-      setApiKey("");
-      onToast(value ? "Gemini API key saved." : "Gemini API key cleared.");
+      setKeys([""]);
+      onToast(value ? `${filledKeys.length} Gemini API key${filledKeys.length > 1 ? "s" : ""} saved.` : "Gemini API key cleared.");
     } catch (err) {
       onToast(err instanceof Error ? err.message : "Failed to save API key.");
     } finally {
@@ -180,24 +192,33 @@ function AiSection({ onToast }: { onToast: (message: string) => void }) {
   }
 
   return (
-    <SectionCard icon={KeyRound} title="AI · PRD generator" description="Google Gemini API key used to generate PRD prompts from the Create PRD page.">
+    <SectionCard icon={KeyRound} title="AI · PRD generator" description="Google Gemini API keys used to generate PRD prompts from the Create PRD page. Add up to 5 keys — if one fails, the next is tried automatically.">
       <div className="space-y-3">
-        <label htmlFor="gemini-key" className="block text-[10px] font-semibold uppercase tracking-[.12em] text-(--crm-label)">Gemini API key</label>
-        <div className="flex gap-2">
-          <input
-            id="gemini-key"
-            type={show ? "text" : "password"}
-            value={apiKey}
-            onChange={(e) => setApiKey(e.target.value)}
-            placeholder={keyConfigured ? (apiKey.trim() ? "Enter a new key to replace it" : "••••••••••••••••  (key is set)") : "AIza…"}
-            autoComplete="off"
-            className="h-10 flex-1 rounded-lg border border-(--crm-border-input) bg-(--crm-surface) px-3 font-mono text-sm outline-none transition-colors placeholder:text-(--crm-placeholder) focus:border-(--crm-mid) focus:ring-2 focus:ring-(--crm-soft)"
-          />
-          <button onClick={() => setShow((prev) => !prev)} className="flex h-10 items-center gap-1.5 rounded-lg border border-(--crm-border-input) px-3 text-xs font-semibold text-(--crm-secondary) transition-colors hover:bg-(--crm-hover)" title={show ? "Hide key" : "Show key"} aria-label={show ? "Hide key" : "Show key"}>{show ? <EyeOff size={16} /> : <Eye size={16} />}</button>
-          <button onClick={() => void saveKey()} disabled={busy || (!changed && !keyConfigured)} className="flex h-10 items-center gap-1.5 rounded-lg bg-(--crm-primary) px-4 text-sm font-semibold text-white transition-colors hover:bg-(--crm-dark) disabled:cursor-not-allowed disabled:opacity-60"><KeyRound size={14} />{busy ? "Saving…" : changed ? "Save" : "Clear"}</button>
+        <label className="block text-[10px] font-semibold uppercase tracking-[.12em] text-(--crm-label)">Gemini API keys</label>
+        <div className="space-y-2">
+          {keys.map((key, index) => (
+            <div key={index} className="flex gap-2">
+              <input
+                type={show ? "text" : "password"}
+                value={key}
+                onChange={(e) => setKey(index, e.target.value)}
+                placeholder={keyConfigured && !key.trim() ? "••••••••••••••••  (key already set)" : "AIza…"}
+                autoComplete="off"
+                className="h-10 flex-1 rounded-lg border border-(--crm-border-input) bg-(--crm-surface) px-3 font-mono text-sm outline-none transition-colors placeholder:text-(--crm-placeholder) focus:border-(--crm-mid) focus:ring-2 focus:ring-(--crm-soft)"
+              />
+              {keys.length > 1 && (
+                <button onClick={() => removeKey(index)} className="flex h-10 items-center gap-1.5 rounded-lg border border-(--crm-border-input) px-3 text-xs font-semibold text-(--crm-danger) transition-colors hover:bg-(--crm-danger-bg)" title="Remove key" aria-label="Remove key"><X size={15} /></button>
+              )}
+            </div>
+          ))}
         </div>
-        <p className="text-[11px] leading-5 text-(--crm-muted)">Get a free key at <span className="font-mono text-(--crm-brand)">aistudio.google.com/apikey</span>. The key is stored securely in the database, never sent to the browser, and only used by the PRD generator. Leave the key unreachable to reset it — press <span className="font-mono text-(--crm-brand)">Clear</span> to remove it.</p>
-        <p className="text-[11px] leading-5 text-(--crm-muted)">Status: <span className={`font-semibold ${keyConfigured ? "text-(--crm-mid)" : "text-(--crm-danger)"}`}>{keyConfigured ? "A key is configured" : "No key configured"}</span></p>
+        <div className="flex flex-wrap gap-2">
+          <button onClick={addKey} disabled={keys.length >= 5} className="flex items-center gap-1.5 rounded-lg border border-(--crm-border-input) px-3 py-2 text-xs font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover) disabled:cursor-not-allowed disabled:opacity-50"><Plus size={14} />Add API key ({keys.length}/5)</button>
+          <button onClick={() => setShow((prev) => !prev)} className="flex items-center gap-1.5 rounded-lg border border-(--crm-border-input) px-3 py-2 text-xs font-semibold text-(--crm-secondary) transition-colors hover:bg-(--crm-hover)" title={show ? "Hide keys" : "Show keys"} aria-label={show ? "Hide keys" : "Show keys"}>{show ? <EyeOff size={14} /> : <Eye size={14} />}{show ? "Hide" : "Show"}</button>
+          <button onClick={() => void saveKey()} disabled={busy || (!changed && !keyConfigured)} className="flex items-center gap-1.5 rounded-lg bg-(--crm-primary) px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-(--crm-dark) disabled:cursor-not-allowed disabled:opacity-60"><KeyRound size={14} />{busy ? "Saving…" : changed ? "Save keys" : "Clear"}</button>
+        </div>
+        <p className="text-[11px] leading-5 text-(--crm-muted)">Get free keys at <span className="font-mono text-(--crm-brand)">aistudio.google.com/apikey</span>. Separate each key with a new line — up to 5 keys. When one key hits a rate limit or error, the next key is used automatically. Keys are stored securely in the database, never sent to the browser.</p>
+        <p className="text-[11px] leading-5 text-(--crm-muted)">Status: <span className={`font-semibold ${keyConfigured ? "text-(--crm-mid)" : "text-(--crm-danger)"}`}>{keyConfigured ? "API keys configured" : "No API key configured"}</span></p>
       </div>
     </SectionCard>
   );
