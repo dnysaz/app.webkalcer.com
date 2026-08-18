@@ -274,6 +274,19 @@ export function ContentSeoView() {
     }
   }
 
+  /** Picking a different article resets the preview; shows stored result if already analyzed. */
+  function selectForSeo(id: string) {
+    setSeoArticleId(id);
+    setSeoResult(id ? (sortedArticles.find((a) => a.id === id)?.seo ?? null) : null);
+    setError("");
+  }
+
+  function selectForSwot(id: string) {
+    setSwotArticleId(id);
+    setSwotResult(id ? (sortedArticles.find((a) => a.id === id)?.swot ?? null) : null);
+    setError("");
+  }
+
   async function toggleVerify(article: SeoArticle) {
     const next = !article.verified;
     setArticles((all) => all.map((a) => (a.id === article.id ? { ...a, verified: next } : a)));
@@ -434,7 +447,9 @@ export function ContentSeoView() {
             </div>
           </div>
 
-          <div className="space-y-5">
+          {/* Preview column — sticky on xl so it stays put while the brief scrolls,
+              then moves up naturally once the brief column runs out. */}
+          <div className="xl:sticky xl:top-[88px] xl:self-start space-y-5">
             {draftMode && draft ? (
               <div className="rounded-2xl border border-(--crm-border) bg-(--crm-panel) p-5 sm:p-6">
                 <div className="flex flex-wrap items-center justify-between gap-3">
@@ -478,7 +493,7 @@ export function ContentSeoView() {
                 </div>
               </div>
               <div className="mt-5 space-y-3">
-                <ArticlePicker articles={sortedArticles} value={seoArticleId} onChange={setSeoArticleId} loading={articlesLoading} />
+                <ArticlePicker articles={sortedArticles} value={seoArticleId} onChange={selectForSeo} loading={articlesLoading} />
                 {seoArticle && (
                   <button onClick={() => void runSeo()} disabled={seoBusy} className="flex w-full items-center justify-center gap-2 rounded-xl bg-(--crm-primary) px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-(--crm-dark) disabled:cursor-not-allowed disabled:opacity-60">
                     <Sparkles size={16} />{seoBusy ? "Analyzing…" : "Generate SEO"}
@@ -522,7 +537,7 @@ export function ContentSeoView() {
                 </div>
               </div>
               <div className="mt-5 space-y-3">
-                <ArticlePicker articles={sortedArticles} value={swotArticleId} onChange={setSwotArticleId} loading={articlesLoading} />
+                <ArticlePicker articles={sortedArticles} value={swotArticleId} onChange={selectForSwot} loading={articlesLoading} />
                 {swotArticle && (
                   <button onClick={() => void runSwot()} disabled={swotBusy} className="flex w-full items-center justify-center gap-2 rounded-xl bg-(--crm-primary) px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-(--crm-dark) disabled:cursor-not-allowed disabled:opacity-60">
                     <Sparkles size={16} />{swotBusy ? "Analyzing…" : "Run SWOT analysis"}
@@ -599,8 +614,8 @@ export function ContentSeoView() {
                       <td className="px-4 py-3.5 text-xs text-(--crm-muted)">{formatDate(article.updatedAt)}</td>
                       <td className="px-4 py-3.5">
                         <div className="flex items-center justify-end gap-1">
-                          <button onClick={() => { setTab("seo"); setSeoArticleId(article.id); setSeoResult(article.seo); }} className="rounded-lg p-2 text-(--crm-muted) transition-colors hover:bg-(--crm-soft) hover:text-(--crm-text)" title="Run SEO" aria-label="Run SEO"><Wand2 size={14} /></button>
-                          <button onClick={() => { setTab("swot"); setSwotArticleId(article.id); setSwotResult(article.swot); }} className="rounded-lg p-2 text-(--crm-muted) transition-colors hover:bg-(--crm-soft) hover:text-(--crm-text)" title="Run SWOT" aria-label="Run SWOT"><Bot size={14} /></button>
+                          <button onClick={() => { setTab("seo"); selectForSeo(article.id); }} className="rounded-lg p-2 text-(--crm-muted) transition-colors hover:bg-(--crm-soft) hover:text-(--crm-text)" title="Run SEO" aria-label="Run SEO"><Wand2 size={14} /></button>
+                          <button onClick={() => { setTab("swot"); selectForSwot(article.id); }} className="rounded-lg p-2 text-(--crm-muted) transition-colors hover:bg-(--crm-soft) hover:text-(--crm-text)" title="Run SWOT" aria-label="Run SWOT"><Bot size={14} /></button>
                           <button onClick={() => void downloadArticlePdf(article, article.seo, article.swot)} className="rounded-lg p-2 text-(--crm-muted) transition-colors hover:bg-(--crm-soft) hover:text-(--crm-text)" title="Download PDF (article + reports)" aria-label="Download PDF"><FileText size={14} /></button>
                           <button onClick={() => downloadText(article.content, `${article.title.replace(/[^a-z0-9-]+/gi, "-").toLowerCase().slice(0, 60)}.md`)} className="rounded-lg p-2 text-(--crm-muted) transition-colors hover:bg-(--crm-soft) hover:text-(--crm-text)" title="Download .md" aria-label="Download .md"><Download size={14} /></button>
                           <button onClick={() => setConfirmDelete(article)} className="rounded-lg p-2 text-(--crm-muted) transition-colors hover:bg-(--crm-danger-bg) hover:text-(--crm-danger)" title="Delete article" aria-label="Delete article"><Trash2 size={14} /></button>
@@ -644,6 +659,7 @@ export function ContentSeoView() {
           widthClass="sm:w-[680px] lg:w-[760px]"
           footer={
             <>
+              <button onClick={() => void copyText(detail.content, "Article copied")} className="flex items-center gap-1.5 rounded-xl border border-(--crm-border-input) px-4 py-2.5 text-sm font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover)"><Copy size={15} />Copy article</button>
               <button onClick={() => void downloadArticlePdf(detail, detail.seo, detail.swot)} className="flex items-center gap-1.5 rounded-xl border border-(--crm-border-input) px-4 py-2.5 text-sm font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover)"><FileText size={15} />PDF</button>
               <button onClick={() => downloadText(detail.content, `${detail.title.replace(/[^a-z0-9-]+/gi, "-").toLowerCase().slice(0, 60)}.md`)} className="flex items-center gap-1.5 rounded-xl border border-(--crm-border-input) px-4 py-2.5 text-sm font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover)"><Download size={15} />.md</button>
               <div className="flex-1" />
