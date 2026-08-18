@@ -758,6 +758,32 @@ export function downloadPdf(doc: jsPDF, filename: string) {
   doc.save(filename);
 }
 
+/** Draws a donut ring gauge: gray track ring + green progress arc + white hole. */
+function drawDonut(doc: jsPDF, cx: number, cy: number, r: number, pct: number) {
+  const clamped = Math.max(0, Math.min(1, pct));
+  // Track ring.
+  doc.setDrawColor(...BORDER);
+  doc.setLineWidth(4);
+  doc.circle(cx, cy, r, "S");
+  // Progress arc from 12 o'clock, clockwise.
+  if (clamped > 0) {
+    doc.setDrawColor(...GREEN);
+    doc.setLineWidth(4);
+    const start = -90;
+    const end = -90 + 360 * clamped;
+    const steps = Math.max(8, Math.round(72 * Math.max(0.05, clamped)));
+    for (let s = 0; s < steps; s++) {
+      const a0 = ((start + ((end - start) * s) / steps) * Math.PI) / 180;
+      const a1 = ((start + ((end - start) * (s + 1)) / steps) * Math.PI) / 180;
+      doc.line(cx + r * Math.cos(a0), cy + r * Math.sin(a0), cx + r * Math.cos(a1), cy + r * Math.sin(a1));
+    }
+  }
+  // Cut out the center so the progress arc reads as a ring.
+  doc.setFillColor(255, 255, 255);
+  doc.setDrawColor(255, 255, 255);
+  doc.circle(cx, cy, r - 4.5, "FD");
+}
+
 /**
  * Builds an article PDF. When `seo`/`swot` are provided they are appended as
  * an SEO/SWOT report section on a new page.
@@ -840,12 +866,18 @@ export async function buildArticlePdf(article: Pick<SeoArticle, "title" | "conte
         doc.addPage();
         y = 26;
       }
+      setFontSafe(doc, "DMSans");
+      doc.setFontSize(10.5);
+      doc.setTextColor(...NOTESTEXT);
       for (const tl of textLines) {
         if (y > pageBreak()) {
           drawArticleFooter(doc);
           doc.addPage();
           y = 26;
         }
+        setFontSafe(doc, "DMSans");
+        doc.setFontSize(10.5);
+        doc.setTextColor(...NOTESTEXT);
         doc.text(tl, MARGIN + 6, y);
         y += 5.4;
       }
@@ -917,67 +949,64 @@ export async function buildArticlePdf(article: Pick<SeoArticle, "title" | "conte
     doc.setFontSize(17);
     doc.setTextColor(...DARK);
     doc.text("SEO Report", MARGIN, y);
-    y += 14;
+    y += 16;
 
-    // Score gauge (semi-circle arc + needle).
-    const gx = MARGIN + 40;
-    const gy = y + 22;
-    const gr = 18;
-    doc.setDrawColor(...BORDER);
-    doc.setLineWidth(4);
-    doc.line(gx - gr, gy, gx + gr, gy); // baseline
-    doc.setDrawColor(...GREEN);
-    doc.setLineWidth(4);
-    // Arc from 180° to 0° (semi-circle), filled up to score%.
-    for (let a = 180; a >= 180 - (seo.score / 100) * 180; a -= 2) {
-      const rad = (a * Math.PI) / 180;
-      doc.line(gx, gy, gx + gr * Math.cos(rad), gy - gr * Math.sin(rad));
-    }
-    // Needle at score%.
-    const needleRad = (180 - (seo.score / 100) * 180) * (Math.PI / 180);
-    doc.setDrawColor(...DARK);
-    doc.setLineWidth(1);
-    doc.line(gx, gy, gx + (gr - 3) * Math.cos(needleRad), gy - (gr - 3) * Math.sin(needleRad));
-    doc.setFillColor(...GREEN);
-    doc.circle(gx, gy, 1.6, "F");
+    // Score donut + label to its right.
+    const cx = MARGIN + 26;
+    const cy = y + 26;
+    drawDonut(doc, cx, cy, 18, seo.score / 100);
     setFontSafe(doc, "DMSans", "bold");
-    doc.setFontSize(16);
+    doc.setFontSize(18);
     doc.setTextColor(...DARK);
-    doc.text(`${seo.score}/100`, gx + 30, gy + 1);
+    doc.text(`${seo.score}`, cx, cy + 1);
     setFontSafe(doc, "DMSansSemi");
-    doc.setFontSize(7);
+    doc.setFontSize(8);
     doc.setTextColor(...MUTED);
-    doc.text("ESTIMATED SEO SCORE", gx + 30, gy + 7);
-    y += 48;
+    doc.text("/100", cx + 14, cy + 1);
+    setFontSafe(doc, "DMSansSemi");
+    doc.setFontSize(8.5);
+    doc.setTextColor(...DARK);
+    doc.text("Estimated SEO score", cx + 38, cy - 2);
+    setFontSafe(doc, "DMSans");
+    doc.setFontSize(8);
+    doc.setTextColor(...MUTED);
+    doc.text("based on title, description, structure", cx + 38, cy + 4);
+    y += 56;
 
     // Metric bars.
     const bar = (label: string, value: number, max: number, unit: string) => {
-      const bw = w - 30;
+      const bw = w - 34;
       const pct = Math.max(0, Math.min(100, (value / max) * 100));
       setFontSafe(doc, "DMSansSemi");
       doc.setFontSize(8);
-      doc.setTextColor(...MUTED);
-      doc.text(`${label}  ${value}${unit}`, MARGIN, y);
+      doc.setTextColor(...DARK);
+      doc.text(`${label}`, MARGIN, y);
       setFontSafe(doc, "DMSans");
       doc.setFontSize(8);
-      doc.setTextColor(...BODY);
-      doc.text(`/ ${max}${unit}`, MARGIN + bw - 20, y, { align: "right" });
+      doc.setTextColor(...MUTED);
+      doc.text(`${value}${unit} / ${max}${unit}`, MARGIN + 62, y);
       // track
       doc.setDrawColor(...ROWLINE);
-      doc.setLineWidth(3);
-      doc.line(MARGIN, y + 3, MARGIN + bw, y + 3);
+      doc.setLineWidth(3.2);
+      doc.line(MARGIN, y + 3.2, MARGIN + bw, y + 3.2);
       // fill
       doc.setDrawColor(...GREEN);
-      doc.setLineWidth(3);
-      doc.line(MARGIN, y + 3, MARGIN + bw * (pct / 100), y + 3);
-      y += 14;
+      doc.setLineWidth(3.2);
+      doc.line(MARGIN, y + 3.2, MARGIN + bw * (pct / 100), y + 3.2);
+      y += 13;
     };
-    bar("Title length", seo.title.length, 60, " chars");
-    bar("Meta description", seo.description.length, 160, " chars");
+    bar("Title", seo.title.length, 60, " ch");
+    bar("Meta description", seo.description.length, 160, " ch");
     bar("Hashtags", seo.hashtags.length, 5, "");
     y += 4;
 
+    // Detail blocks — every block resets font explicitly.
     const block = (label: string, value: string) => {
+      if (y + 20 > pageBreak()) {
+        drawArticleFooter(doc);
+        doc.addPage();
+        y = 26;
+      }
       setFontSafe(doc, "DMSansSemi");
       doc.setFontSize(8);
       doc.setTextColor(...MUTED);
@@ -993,6 +1022,9 @@ export async function buildArticlePdf(article: Pick<SeoArticle, "title" | "conte
           doc.addPage();
           y = 26;
         }
+        setFontSafe(doc, "DMSans");
+        doc.setFontSize(10.5);
+        doc.setTextColor(...NOTESTEXT);
         doc.text(vl, MARGIN, y);
         y += 5.6;
       }
@@ -1017,103 +1049,99 @@ export async function buildArticlePdf(article: Pick<SeoArticle, "title" | "conte
     doc.setFontSize(17);
     doc.setTextColor(...DARK);
     doc.text("SWOT Analysis", MARGIN, y);
-    y += 14;
+    y += 16;
 
-    // Score gauge (semi-circle arc + needle).
-    const gx = MARGIN + 40;
-    const gy = y + 22;
-    const gr = 18;
-    doc.setDrawColor(...BORDER);
-    doc.setLineWidth(4);
-    doc.line(gx - gr, gy, gx + gr, gy);
-    doc.setDrawColor(...GREEN);
-    doc.setLineWidth(4);
-    for (let a = 180; a >= 180 - (swot.seoScore / 100) * 180; a -= 2) {
-      const rad = (a * Math.PI) / 180;
-      doc.line(gx, gy, gx + gr * Math.cos(rad), gy - gr * Math.sin(rad));
-    }
-    const needleRad = (180 - (swot.seoScore / 100) * 180) * (Math.PI / 180);
-    doc.setDrawColor(...DARK);
-    doc.setLineWidth(1);
-    doc.line(gx, gy, gx + (gr - 3) * Math.cos(needleRad), gy - (gr - 3) * Math.sin(needleRad));
-    doc.setFillColor(...GREEN);
-    doc.circle(gx, gy, 1.6, "F");
+    // Score donut + label.
+    const cx = MARGIN + 26;
+    const cy = y + 26;
+    drawDonut(doc, cx, cy, 18, swot.seoScore / 100);
     setFontSafe(doc, "DMSans", "bold");
-    doc.setFontSize(16);
+    doc.setFontSize(18);
     doc.setTextColor(...DARK);
-    doc.text(`${swot.seoScore}/100`, gx + 30, gy + 1);
+    doc.text(`${swot.seoScore}`, cx, cy + 1);
     setFontSafe(doc, "DMSansSemi");
-    doc.setFontSize(7);
+    doc.setFontSize(8);
     doc.setTextColor(...MUTED);
-    doc.text("ESTIMATED SEO SCORE", gx + 30, gy + 7);
-    y += 48;
+    doc.text("/100", cx + 14, cy + 1);
+    setFontSafe(doc, "DMSansSemi");
+    doc.setFontSize(8.5);
+    doc.setTextColor(...DARK);
+    doc.text("Estimated SEO score", cx + 38, cy - 2);
+    setFontSafe(doc, "DMSans");
+    doc.setFontSize(8);
+    doc.setTextColor(...MUTED);
+    doc.text("from the SWOT analysis", cx + 38, cy + 4);
+    y += 56;
 
-    // 2×2 SWOT matrix with colored quadrants.
-    const mw = (w - 6) / 2;
-    const mh = 34;
-    const colors: [RGB, RGB][] = [
-      [[222, 241, 229], [53, 115, 85]], // Strengths — green
-      [[244, 223, 227], [162, 75, 98]], // Weaknesses — red
-      [[253, 241, 220], [154, 106, 42]], // Opportunities — amber
-      [[227, 232, 247], [78, 101, 163]], // Threats — blue
-    ];
-    const quadrants: { label: string; items: string[] }[] = [
-      { label: "Strengths", items: swot.strengths },
-      { label: "Weaknesses", items: swot.weaknesses },
-      { label: "Opportunities", items: swot.opportunities },
-      { label: "Threats", items: swot.threats },
-    ];
-    for (let qi = 0; qi < 4; qi++) {
-      const col = qi % 2;
-      const rowIdx = Math.floor(qi / 2);
-      const qx = MARGIN + col * mw;
-      const qy = y + rowIdx * mh;
-      const [bg, fg] = colors[qi];
-      doc.setFillColor(...bg);
-      doc.setDrawColor(...fg);
-      doc.setLineWidth(0.4);
-      doc.roundedRect(qx, qy, mw - 2, mh - 3, 2, 2, "FD");
-      setFontSafe(doc, "DMSansSemi");
-      doc.setFontSize(8.5);
-      doc.setTextColor(...fg);
-      doc.text(quadrants[qi].label.toUpperCase(), qx + 4, qy + 6);
-      setFontSafe(doc, "DMSans");
-      doc.setFontSize(7.5);
-      doc.setTextColor(...fg);
-      let iy = qy + 11;
-      for (const item of quadrants[qi].items.slice(0, 3)) {
-        const itemLines = doc.splitTextToSize(item, mw - 10) as string[];
-        for (const il of itemLines.slice(0, 2)) {
-          if (iy > qy + mh - 5) break;
-          doc.text(il, qx + 4, iy);
-          iy += 4.2;
-        }
+    // SWOT as plain sections with bullets — no colored cards.
+    const section = (label: string, items: string[]) => {
+      if (y + 24 > pageBreak()) {
+        drawArticleFooter(doc);
+        doc.addPage();
+        y = 26;
       }
-    }
-    y += mh * 2 + 4;
-
-    const block = (label: string, value: string) => {
-      setFontSafe(doc, "DMSansSemi");
-      doc.setFontSize(8);
-      doc.setTextColor(...MUTED);
-      doc.text(label.toUpperCase(), MARGIN, y + 3);
       y += 6;
+      setFontSafe(doc, "DMSansSemi");
+      doc.setFontSize(12);
+      doc.setTextColor(...GREEN);
+      doc.text(label, MARGIN, y);
+      y += 7;
       setFontSafe(doc, "DMSans");
       doc.setFontSize(10.5);
       doc.setTextColor(...NOTESTEXT);
-      const valueLines = doc.splitTextToSize(value || "—", w) as string[];
-      for (const vl of valueLines) {
+      for (const item of items) {
+        const itemLines = doc.splitTextToSize(`•  ${item}`, w - 6) as string[];
+        for (const il of itemLines) {
+          if (y + 6 > pageBreak()) {
+            drawArticleFooter(doc);
+            doc.addPage();
+            y = 26;
+          }
+          setFontSafe(doc, "DMSans");
+          doc.setFontSize(10.5);
+          doc.setTextColor(...NOTESTEXT);
+          doc.text(il, MARGIN + 3, y);
+          y += 5.4;
+        }
+        y += 1.5;
+      }
+      y += 3;
+    };
+    section("Strengths", swot.strengths);
+    section("Weaknesses", swot.weaknesses);
+    section("Opportunities", swot.opportunities);
+    section("Threats", swot.threats);
+
+    // Summary.
+    if (swot.summary) {
+      if (y + 20 > pageBreak()) {
+        drawArticleFooter(doc);
+        doc.addPage();
+        y = 26;
+      }
+      y += 6;
+      setFontSafe(doc, "DMSansSemi");
+      doc.setFontSize(12);
+      doc.setTextColor(...GREEN);
+      doc.text("Summary", MARGIN, y);
+      y += 7;
+      setFontSafe(doc, "DMSans");
+      doc.setFontSize(10.5);
+      doc.setTextColor(...NOTESTEXT);
+      const sumLines = doc.splitTextToSize(swot.summary, w) as string[];
+      for (const sl of sumLines) {
         if (y + 6 > pageBreak()) {
           drawArticleFooter(doc);
           doc.addPage();
           y = 26;
         }
-        doc.text(vl, MARGIN, y);
+        setFontSafe(doc, "DMSans");
+        doc.setFontSize(10.5);
+        doc.setTextColor(...NOTESTEXT);
+        doc.text(sl, MARGIN, y);
         y += 5.6;
       }
-      y += 7;
-    };
-    block("Summary", swot.summary);
+    }
     drawArticleFooter(doc);
   }
 
