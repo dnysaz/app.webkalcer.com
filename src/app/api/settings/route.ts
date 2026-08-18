@@ -6,7 +6,7 @@ import { requireAuth } from "@/lib/auth";
 import { setupDatabase } from "@/lib/setup";
 import { DEFAULT_SETTINGS, FONT_SIZES, SETTINGS_ROW_ID, THEMES } from "@/lib/settings";
 import type { FontSizeKey, ThemeKey } from "@/lib/settings";
-import { parseGeminiKeys } from "@/lib/gemini";
+import { MAX_GEMINI_KEYS, parseGeminiKeys } from "@/lib/gemini";
 
 type SettingsRow = { site_name: string; theme: string; font_size: string; gemini_api_key: string };
 
@@ -38,11 +38,12 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   try {
-    const body = (await request.json()) as { siteName?: string; theme?: string; fontSize?: string; geminiApiKey?: string };
+    const body = (await request.json()) as { siteName?: string; theme?: string; fontSize?: string; geminiApiKey?: string; merge?: boolean };
     const siteName = typeof body.siteName === "string" ? body.siteName.trim().slice(0, 80) : undefined;
     const theme = body.theme && THEMES[body.theme as ThemeKey] ? (body.theme as ThemeKey) : undefined;
     const fontSize = body.fontSize && FONT_SIZES[body.fontSize as FontSizeKey] ? (body.fontSize as FontSizeKey) : undefined;
     const geminiApiKey = typeof body.geminiApiKey === "string" ? body.geminiApiKey.trim() : undefined;
+    const merge = body.merge === true;
 
     if (siteName !== undefined && !siteName) {
       return NextResponse.json({ error: "Site name cannot be empty." }, { status: 400 });
@@ -54,11 +55,20 @@ export async function PATCH(request: Request) {
     await setupDatabase();
     const rows = await query<SettingsRow>`SELECT site_name, theme, font_size, gemini_api_key FROM settings WHERE id = ${SETTINGS_ROW_ID} LIMIT 1`;
     const current = rows[0];
-    const geminiKeyCount = parseGeminiKeys(geminiApiKey ?? current?.gemini_api_key ?? "").length;
+    // In merge mode the incoming keys are appended to the stored ones
+    // (deduped) instead of replacing them.
+    let finalKeysValue = geminiApiKey;
+    if (merge && geminiApiKey !== undefined) {
+      const existing = parseGeminiKeys(current?.gemini_api_key ?? "");
+      const incoming = parseGeminiKeys(geminiApiKey);
+      const combined = [...existing, ...incoming];
+      finalKeysValue = [...new Set(combined)].slice(0, MAX_GEMINI_KEYS).join("\n");
+    }
+    const geminiKeyCount = parseGeminiKeys(finalKeysValue ?? current?.gemini_api_key ?? "").length;
     const sql = getSql();
     await sql`
       INSERT INTO settings (id, site_name, theme, font_size, gemini_api_key, updated_at)
-      VALUES (${SETTINGS_ROW_ID}, ${siteName ?? current?.site_name ?? DEFAULT_SETTINGS.siteName}, ${theme ?? current?.theme ?? DEFAULT_SETTINGS.theme}, ${fontSize ?? current?.font_size ?? DEFAULT_SETTINGS.fontSize}, ${geminiApiKey ?? current?.gemini_api_key ?? ""}, now())
+      VALUES (${SETTINGS_ROW_ID}, ${siteName ?? current?.site_name ?? DEFAULT_SETTINGS.siteName}, ${theme ?? current?.theme ?? DEFAULT_SETTINGS.theme}, ${fontSize ?? current?.font_size ?? DEFAULT_SETTINGS.fontSize}, ${finalKeysValue ?? current?.gemini_api_key ?? ""}, now())
       ON CONFLICT (id) DO UPDATE SET
         site_name = EXCLUDED.site_name,
         theme = EXCLUDED.theme,

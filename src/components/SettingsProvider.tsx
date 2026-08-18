@@ -6,7 +6,7 @@ import { DEFAULT_SETTINGS, FONT_SIZES, THEMES, THEME_VAR_KEYS } from "@/lib/sett
 import type { FontSizeKey, SiteSettings, ThemeKey } from "@/lib/settings";
 
 /** Patch payload. `geminiApiKey` is send-only — the stored key never leaves the server. */
-export type SettingsPatch = Partial<SiteSettings> & { geminiApiKey?: string };
+export type SettingsPatch = Partial<SiteSettings> & { geminiApiKey?: string; merge?: boolean };
 
 type SettingsContextValue = {
   settings: SiteSettings;

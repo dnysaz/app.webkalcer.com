@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Eye, EyeOff, Globe, KeyRound, Lock, LogOut, Type, UserRound } from "lucide-react";
+import { Check, Eye, EyeOff, Globe, KeyRound, Lock, LogOut, Pencil, Type, UserRound, X } from "lucide-react";
 import { CrmShell } from "@/components/CrmShell";
 import { useSettings } from "@/components/SettingsProvider";
 import { useAuth } from "@/components/AuthProvider";
@@ -162,6 +162,9 @@ function AiSection({ onToast }: { onToast: (message: string) => void }) {
   const { settings, updateSettings } = useSettings();
   // Always exactly MAX_GEMINI_KEYS slots — simple and predictable.
   const [keys, setKeys] = useState<string[]>(() => Array.from({ length: MAX_GEMINI_KEYS }, () => ""));
+  // Which slot is being edited (a saved slot becomes editable when the
+  // pencil icon is clicked).
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
 
   const filledKeys = keys.map((k) => k.trim()).filter(Boolean);
@@ -172,12 +175,15 @@ function AiSection({ onToast }: { onToast: (message: string) => void }) {
   function setKey(index: number, value: string) {
     setKeys((prev) => {
       const next = [...prev];
-      // Keep only the first line per slot; a multi-line paste would be
-      // unusual here, but split it defensively.
       const first = value.split(/\r?\n/)[0] ?? "";
       next[index] = first;
       return next;
     });
+  }
+
+  /** A slot is "saved" when it's within the stored count and not being edited. */
+  function isSaved(index: number): boolean {
+    return index < storedCount && editingIndex !== index;
   }
 
   async function saveKey() {
@@ -188,8 +194,11 @@ function AiSection({ onToast }: { onToast: (message: string) => void }) {
     const value = filledKeys.join("\n");
     setBusy(true);
     try {
-      const result = await updateSettings({ geminiApiKey: value });
+      // Merge mode appends new keys to the stored ones (used when the admin
+      // is just adding slots). Editing a saved slot replaces all keys.
+      const result = await updateSettings({ geminiApiKey: value, merge: editingIndex === null });
       const count = result?.geminiKeyCount ?? filledKeys.length;
+      setEditingIndex(null);
       onToast(value ? `${count} Gemini API key${count > 1 ? "s" : ""} saved.` : "Gemini API key cleared.");
     } catch (err) {
       onToast(err instanceof Error ? err.message : "Failed to save API key.");
@@ -199,7 +208,7 @@ function AiSection({ onToast }: { onToast: (message: string) => void }) {
   }
 
   return (
-    <SectionCard icon={KeyRound} title="AI · API keys" description="Google Gemini API keys used to power all AI features — PRD generator, Content & SEO articles, SEO reports, SWOT analysis, and humanize scoring. Fill any of the 5 slots below; only filled keys are saved. If one key hits a limit or fails, the next is used automatically.">
+    <SectionCard icon={KeyRound} title="AI · API keys" description="Google Gemini API keys used to power all AI features — PRD generator, Content & SEO articles, SEO reports, SWOT analysis, and humanize scoring. Saved keys are locked; use the pencil to replace one, or fill an empty slot to add another. If one key hits a limit or fails, the next is used automatically.">
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <label className="text-[10px] font-semibold uppercase tracking-[.12em] text-(--crm-label)">Gemini API keys</label>
@@ -209,20 +218,36 @@ function AiSection({ onToast }: { onToast: (message: string) => void }) {
         </div>
 
         <div className="space-y-2">
-          {keys.map((key, index) => (
-            <div key={index} className="flex items-center gap-2">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-(--crm-soft) text-[11px] font-bold text-(--crm-text)">Key {index + 1}</span>
-              <input
-                type="text"
-                value={key}
-                onChange={(e) => setKey(index, e.target.value)}
-                placeholder={key.trim() ? "" : `Paste API key ${index + 1} (optional)`}
-                autoComplete="off"
-                spellCheck={false}
-                className="h-10 flex-1 rounded-lg border border-(--crm-border-input) bg-(--crm-surface) px-3 font-mono text-sm outline-none transition-colors placeholder:text-(--crm-placeholder) focus:border-(--crm-mid) focus:ring-2 focus:ring-(--crm-soft)"
-              />
-            </div>
-          ))}
+          {keys.map((key, index) =>
+            isSaved(index) ? (
+              <div key={index} className="flex items-center gap-2">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-(--crm-soft) text-[11px] font-bold text-(--crm-text)">Key {index + 1}</span>
+                <div className="flex h-10 flex-1 items-center justify-between rounded-lg border border-(--crm-border) bg-(--crm-surface) px-3">
+                  <span className="flex items-center gap-2 font-mono text-sm text-(--crm-secondary)">
+                    <span className="flex h-2 w-2 rounded-full bg-(--crm-st-done-text)" />
+                    Saved — click pencil to replace
+                  </span>
+                  <button onClick={() => setEditingIndex(index)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover)" title={`Edit key ${index + 1}`} aria-label={`Edit key ${index + 1}`}><Pencil size={13} />Edit</button>
+                </div>
+              </div>
+            ) : (
+              <div key={index} className="flex items-center gap-2">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-(--crm-soft) text-[11px] font-bold text-(--crm-text)">Key {index + 1}</span>
+                <input
+                  type="text"
+                  value={key}
+                  onChange={(e) => setKey(index, e.target.value)}
+                  placeholder={key.trim() ? "" : `Paste API key ${index + 1} (optional)`}
+                  autoComplete="off"
+                  spellCheck={false}
+                  className="h-10 flex-1 rounded-lg border border-(--crm-border-input) bg-(--crm-surface) px-3 font-mono text-sm outline-none transition-colors placeholder:text-(--crm-placeholder) focus:border-(--crm-mid) focus:ring-2 focus:ring-(--crm-soft)"
+                />
+                {index < storedCount && editingIndex === index && (
+                  <button onClick={() => setEditingIndex(null)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-(--crm-border-input) text-(--crm-secondary) transition-colors hover:bg-(--crm-hover)" title="Cancel edit" aria-label="Cancel edit"><X size={15} /></button>
+                )}
+              </div>
+            ),
+          )}
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
