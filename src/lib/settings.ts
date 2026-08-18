@@ -130,6 +130,11 @@ export interface SiteSettings {
   hasGeminiKey: boolean;
   /** Number of Gemini API keys currently stored server-side. */
   geminiKeyCount: number;
+  /**
+   * Last 5 characters of each stored Gemini API key.
+   * Used to identify which keys are saved without exposing the full key.
+   */
+  geminiKeyTails: string[];
 }
 
 export const DEFAULT_SETTINGS: SiteSettings = {
@@ -138,6 +143,7 @@ export const DEFAULT_SETTINGS: SiteSettings = {
   fontSize: "md",
   hasGeminiKey: false,
   geminiKeyCount: 0,
+  geminiKeyTails: [],
 };
 
 export const SETTINGS_ROW_ID = "site";

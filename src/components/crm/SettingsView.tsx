@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Eye, EyeOff, Globe, KeyRound, Lock, LogOut, Pencil, Type, UserRound, X } from "lucide-react";
+import { Check, Eye, EyeOff, Globe, KeyRound, Lock, LogOut, Plus, Trash2, Type, UserRound, X } from "lucide-react";
 import { CrmShell } from "@/components/CrmShell";
 import { useSettings } from "@/components/SettingsProvider";
 import { useAuth } from "@/components/AuthProvider";
@@ -160,46 +160,64 @@ function WebsiteSection({ onToast }: { onToast: (message: string) => void }) {
 
 function AiSection({ onToast }: { onToast: (message: string) => void }) {
   const { settings, updateSettings } = useSettings();
-  // Always exactly MAX_GEMINI_KEYS slots — simple and predictable.
-  const [keys, setKeys] = useState<string[]>(() => Array.from({ length: MAX_GEMINI_KEYS }, () => ""));
-  // Which slot is being edited (a saved slot becomes editable when the
-  // pencil icon is clicked).
-  const [editingIndex, setEditingIndex] = useState<number | null>(null);
+
+  // Slots for new keys to be added (not yet saved)
+  const [newKeys, setNewKeys] = useState<string[]>([""]);
   const [busy, setBusy] = useState(false);
 
-  const filledKeys = keys.map((k) => k.trim()).filter(Boolean);
-  const changed = filledKeys.length > 0;
-  const hasDuplicate = new Set(filledKeys).size !== filledKeys.length;
   const storedCount = settings.geminiKeyCount;
+  const storedTails = settings.geminiKeyTails ?? [];
+  const remainingSlots = MAX_GEMINI_KEYS - storedCount;
+
+  // Valid keys from the new input slots
+  const filledNewKeys = newKeys.map((k) => k.trim()).filter(Boolean);
+
+  // Check for duplicates among new inputs (realtime)
+  const duplicateAmongNew = new Set(filledNewKeys).size !== filledNewKeys.length;
+
+  // Detect per-slot: whether this key duplicates another slot in newKeys
+  function isDuplicateSlot(index: number): boolean {
+    const val = newKeys[index]?.trim();
+    if (!val) return false;
+    return newKeys.some((k, i) => i !== index && k.trim() === val);
+  }
 
   function setKey(index: number, value: string) {
-    setKeys((prev) => {
+    setNewKeys((prev) => {
       const next = [...prev];
-      const first = value.split(/\r?\n/)[0] ?? "";
-      next[index] = first;
+      // Take only the first line if multiline paste
+      next[index] = value.split(/\r?\n/)[0] ?? "";
       return next;
     });
   }
 
-  /** A slot is "saved" when it's within the stored count and not being edited. */
-  function isSaved(index: number): boolean {
-    return index < storedCount && editingIndex !== index;
+  function addSlot() {
+    if (newKeys.length < remainingSlots) {
+      setNewKeys((prev) => [...prev, ""]);
+    }
   }
 
-  async function saveKey() {
-    if (hasDuplicate) {
+  function removeSlot(index: number) {
+    setNewKeys((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  async function saveNewKeys() {
+    const valid = filledNewKeys;
+    if (valid.length === 0) {
+      onToast("Enter at least one API key before saving.");
+      return;
+    }
+    if (duplicateAmongNew) {
       onToast("Duplicate API keys detected — each key must be unique.");
       return;
     }
-    const value = filledKeys.join("\n");
     setBusy(true);
     try {
-      // Merge mode appends new keys to the stored ones (used when the admin
-      // is just adding slots). Editing a saved slot replaces all keys.
-      const result = await updateSettings({ geminiApiKey: value, merge: editingIndex === null });
-      const count = result?.geminiKeyCount ?? filledKeys.length;
-      setEditingIndex(null);
-      onToast(value ? `${count} Gemini API key${count > 1 ? "s" : ""} saved.` : "Gemini API key cleared.");
+      // merge: true → append to existing stored keys
+      const result = await updateSettings({ geminiApiKey: valid.join("\n"), merge: true });
+      const count = result?.geminiKeyCount ?? (storedCount + valid.length);
+      setNewKeys([""]);
+      onToast(`${count} Gemini API key${count > 1 ? "s" : ""} saved.`);
     } catch (err) {
       onToast(err instanceof Error ? err.message : "Failed to save API key.");
     } finally {
@@ -207,58 +225,201 @@ function AiSection({ onToast }: { onToast: (message: string) => void }) {
     }
   }
 
-  return (
-    <SectionCard icon={KeyRound} title="AI · API keys" description="Google Gemini API keys used to power all AI features — PRD generator, Content & SEO articles, SEO reports, SWOT analysis, and humanize scoring. Saved keys are locked; use the pencil to replace one, or fill an empty slot to add another. If one key hits a limit or fails, the next is used automatically.">
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <label className="text-[10px] font-semibold uppercase tracking-[.12em] text-(--crm-label)">Gemini API keys</label>
-          <span className="rounded-full border border-(--crm-border-input) px-2.5 py-1 text-[11px] font-semibold text-(--crm-secondary)">
-            {changed ? `${filledKeys.length} ready to save` : storedCount ? `${storedCount} saved` : "None"}
-          </span>
-        </div>
+  async function removeStoredKey(tailIndex: number) {
+    // Send the index of the key to remove — server handles the rest.
+    setBusy(true);
+    try {
+      const result = await updateSettings({ removeKeyIndex: tailIndex } as Parameters<typeof updateSettings>[0]);
+      const count = result?.geminiKeyCount ?? 0;
+      onToast(count > 0 ? `Key removed. ${count} key${count !== 1 ? "s" : ""} remaining.` : "All API keys removed.");
+    } catch (err) {
+      onToast(err instanceof Error ? err.message : "Failed to remove key.");
+    } finally {
+      setBusy(false);
+    }
+  }
 
-        <div className="space-y-2">
-          {keys.map((key, index) =>
-            isSaved(index) ? (
-              <div key={index} className="flex items-center gap-2">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-(--crm-soft) text-[11px] font-bold text-(--crm-text)">Key {index + 1}</span>
-                <div className="flex h-10 flex-1 items-center justify-between rounded-lg border border-(--crm-border) bg-(--crm-surface) px-3">
-                  <span className="flex items-center gap-2 font-mono text-sm text-(--crm-secondary)">
-                    <span className="flex h-2 w-2 rounded-full bg-(--crm-st-done-text)" />
-                    Saved — click pencil to replace
+  async function clearAllKeys() {
+    setBusy(true);
+    try {
+      await updateSettings({ geminiApiKey: "" });
+      onToast("All Gemini API keys removed.");
+    } catch (err) {
+      onToast(err instanceof Error ? err.message : "Failed to remove keys.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  const canAddMore = newKeys.length < remainingSlots;
+  const saveDisabled = busy || duplicateAmongNew || filledNewKeys.length === 0;
+
+  return (
+    <SectionCard
+      icon={KeyRound}
+      title="AI · API keys"
+      description="Google Gemini API keys used to power all AI features. If one key hits its limit or fails, the next is used automatically. Up to 5 keys supported."
+    >
+      <div className="space-y-5">
+
+        {/* === SAVED KEYS === */}
+        {storedCount > 0 && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-semibold uppercase tracking-[.12em] text-(--crm-label)">
+                Saved in database
+              </p>
+              <span className="rounded-full border border-(--crm-border-input) px-2.5 py-0.5 text-[11px] font-semibold text-(--crm-mid)">
+                {storedCount} / {MAX_GEMINI_KEYS} keys
+              </span>
+            </div>
+            <div className="space-y-2">
+              {storedTails.map((tail, index) => (
+                <div key={index} className="flex items-center gap-2">
+                  <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-(--crm-soft) text-[10px] font-bold text-(--crm-text)">
+                    #{index + 1}
                   </span>
-                  <button onClick={() => setEditingIndex(index)} className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover)" title={`Edit key ${index + 1}`} aria-label={`Edit key ${index + 1}`}><Pencil size={13} />Edit</button>
+                  <div className="flex h-10 flex-1 items-center gap-2.5 rounded-lg border border-(--crm-border) bg-(--crm-surface) px-3">
+                    <span className="flex h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
+                    <span className="flex-1 font-mono text-sm text-(--crm-secondary)">
+                      ••••••••••••••••<span className="text-(--crm-text) font-semibold">{tail}</span>
+                    </span>
+                    <span className="rounded-md bg-(--crm-soft) px-1.5 py-0.5 text-[10px] font-semibold text-(--crm-mid)">
+                      ...{tail}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => void removeStoredKey(index)}
+                    disabled={busy}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-(--crm-danger-border) text-(--crm-danger) transition-colors hover:bg-(--crm-danger-bg) disabled:cursor-not-allowed disabled:opacity-50"
+                    title={`Remove key #${index + 1}`}
+                    aria-label={`Remove key #${index + 1}`}
+                  >
+                    <Trash2 size={14} />
+                  </button>
                 </div>
-              </div>
-            ) : (
-              <div key={index} className="flex items-center gap-2">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-(--crm-soft) text-[11px] font-bold text-(--crm-text)">Key {index + 1}</span>
-                <input
-                  type="text"
-                  value={key}
-                  onChange={(e) => setKey(index, e.target.value)}
-                  placeholder={key.trim() ? "" : `Paste API key ${index + 1} (optional)`}
-                  autoComplete="off"
-                  spellCheck={false}
-                  className="h-10 flex-1 rounded-lg border border-(--crm-border-input) bg-(--crm-surface) px-3 font-mono text-sm outline-none transition-colors placeholder:text-(--crm-placeholder) focus:border-(--crm-mid) focus:ring-2 focus:ring-(--crm-soft)"
-                />
-                {index < storedCount && editingIndex === index && (
-                  <button onClick={() => setEditingIndex(null)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-(--crm-border-input) text-(--crm-secondary) transition-colors hover:bg-(--crm-hover)" title="Cancel edit" aria-label="Cancel edit"><X size={15} /></button>
-                )}
-              </div>
-            ),
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* === NEW KEY INPUTS === */}
+        {remainingSlots > 0 && (
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-[10px] font-semibold uppercase tracking-[.12em] text-(--crm-label)">
+                {storedCount > 0 ? "Add new key" : "Gemini API keys"}
+              </label>
+              {remainingSlots > 1 && canAddMore && (
+                <button
+                  onClick={addSlot}
+                  className="flex items-center gap-1 text-[11px] font-semibold text-(--crm-brand) transition-colors hover:underline"
+                >
+                  <Plus size={12} />
+                  Add slot
+                </button>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              {newKeys.map((key, index) => {
+                const isDup = isDuplicateSlot(index);
+                return (
+                  <div key={index} className="flex items-center gap-2">
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-(--crm-soft) text-[10px] font-bold text-(--crm-text)">
+                      #{storedCount + index + 1}
+                    </span>
+                    <div className="relative flex-1">
+                      <input
+                        type="text"
+                        value={key}
+                        onChange={(e) => setKey(index, e.target.value)}
+                        placeholder={`Paste API key ${storedCount + index + 1}`}
+                        autoComplete="off"
+                        spellCheck={false}
+                        className={`h-10 w-full rounded-lg border px-3 font-mono text-sm outline-none transition-colors placeholder:text-(--crm-placeholder) focus:ring-2 focus:ring-(--crm-soft) ${
+                          isDup
+                            ? "border-red-400 bg-red-50 focus:border-red-400 dark:bg-red-950/20"
+                            : "border-(--crm-border-input) bg-(--crm-surface) focus:border-(--crm-mid)"
+                        }`}
+                      />
+                      {isDup && (
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[11px] font-semibold text-red-500">
+                          duplicate
+                        </span>
+                      )}
+                    </div>
+                    {newKeys.length > 1 && (
+                      <button
+                        onClick={() => removeSlot(index)}
+                        className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-(--crm-border-input) text-(--crm-secondary) transition-colors hover:border-(--crm-danger-border) hover:text-(--crm-danger)"
+                        title="Remove this slot"
+                        aria-label="Remove this slot"
+                      >
+                        <X size={14} />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Inline add-slot button when only 1 slot and more room available */}
+            {newKeys.length === 1 && remainingSlots > 1 && (
+              <button
+                onClick={addSlot}
+                className="flex items-center gap-1.5 rounded-lg border border-dashed border-(--crm-border-input) px-3 py-2 text-xs font-semibold text-(--crm-secondary) transition-colors hover:border-(--crm-mid) hover:text-(--crm-text) w-full justify-center"
+              >
+                <Plus size={13} />
+                Add another key ({remainingSlots - 1} slot{remainingSlots - 1 !== 1 ? "s" : ""} remaining)
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Max capacity message */}
+        {remainingSlots === 0 && storedCount > 0 && (
+          <p className="text-[11px] font-semibold text-(--crm-mid)">
+            ✓ {MAX_GEMINI_KEYS} keys configured — maximum reached. Remove an unused key to add a new one.
+          </p>
+        )}
+
+        {/* === ACTION BUTTONS === */}
+        <div className="flex flex-wrap items-center gap-2 pt-1">
+          {remainingSlots > 0 && (
+            <button
+              onClick={() => void saveNewKeys()}
+              disabled={saveDisabled}
+              className="flex items-center gap-1.5 rounded-lg bg-(--crm-primary) px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-(--crm-dark) disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <KeyRound size={14} />
+              {busy ? "Saving…" : filledNewKeys.length > 0 ? `Save ${filledNewKeys.length} key${filledNewKeys.length > 1 ? "s" : ""}` : "Save"}
+            </button>
+          )}
+          {storedCount > 0 && (
+            <button
+              onClick={() => void clearAllKeys()}
+              disabled={busy}
+              className="flex items-center gap-1.5 rounded-lg border border-(--crm-danger-border) px-4 py-2 text-sm font-semibold text-(--crm-danger) transition-colors hover:bg-(--crm-danger-bg) disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              <Trash2 size={14} />
+              Remove all
+            </button>
           )}
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button onClick={() => void saveKey()} disabled={busy || hasDuplicate || (!changed && storedCount === 0)} className="flex items-center gap-1.5 rounded-lg bg-(--crm-primary) px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-(--crm-dark) disabled:cursor-not-allowed disabled:opacity-60">
-            <KeyRound size={14} />{busy ? "Saving…" : changed ? `Save ${filledKeys.length} key${filledKeys.length > 1 ? "s" : ""}` : storedCount > 0 ? "Clear keys" : "Save"}
-          </button>
-          <span className="text-[11px] text-(--crm-muted)">Saved in database: <span className={`font-semibold ${storedCount > 0 ? "text-(--crm-mid)" : "text-(--crm-danger)"}`}>{storedCount} key{storedCount !== 1 ? "s" : ""}</span></span>
-        </div>
+        {duplicateAmongNew && (
+          <p className="text-[11px] font-semibold text-red-500">
+            ⚠ Duplicate API keys detected — each key must be unique.
+          </p>
+        )}
 
-        {hasDuplicate && <p className="text-[11px] font-semibold text-(--crm-danger)">Duplicate API keys detected — each key must be unique.</p>}
-        <p className="text-[11px] leading-5 text-(--crm-muted)">Get free keys at <span className="font-mono text-(--crm-brand)">aistudio.google.com/apikey</span>. Keys are stored securely in the database, never sent to the browser.</p>
+        <p className="text-[11px] leading-5 text-(--crm-muted)">
+          Get free keys at{" "}
+          <span className="font-mono text-(--crm-brand)">aistudio.google.com/apikey</span>.
+          Keys are stored securely in the database, never sent to the browser.
+          If a key fails or hits its quota, the next one is used automatically.
+        </p>
       </div>
     </SectionCard>
   );
