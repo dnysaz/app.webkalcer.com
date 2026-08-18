@@ -307,7 +307,9 @@ export function ContentSeoView() {
         verdict: data.verdict,
         notes: data.notes,
       };
-      setArticles((all) => all.map((a) => (a.id === article.id ? { ...a, humanize } : a)));
+      const updated: SeoArticle = { ...article, humanize };
+      setArticles((all) => all.map((a) => (a.id === article.id ? updated : a)));
+      setDetail((d) => (d && d.id === article.id ? updated : d));
       try {
         await fetch(`/api/seo/articles/${article.id}`, {
           method: "PATCH",
@@ -705,7 +707,7 @@ export function ContentSeoView() {
             </>
           }
         >
-          <HumanizeCard article={detail} busy={humanizeBusy === detail.id} onAssess={() => void runHumanize(detail)} />
+          <HumanizeCard article={detail} busy={humanizeBusy === detail.id} error={error} onAssess={() => void runHumanize(detail)} />
           <div className="mt-4">
             <ArticleDetailBody article={detail} />
           </div>
@@ -794,7 +796,7 @@ function ArticleMarkdown({ content }: { content: string }) {
 }
 
 /** AI-vs-Human writing assessment card — shown at the top of the detail drawer. */
-function HumanizeCard({ article, busy, onAssess }: { article: SeoArticle; busy: boolean; onAssess: () => void }) {
+function HumanizeCard({ article, busy, error, onAssess }: { article: SeoArticle; busy: boolean; error: string; onAssess: () => void }) {
   const h = article.humanize;
   return (
     <div className="rounded-2xl border border-(--crm-border) bg-(--crm-panel) p-4 sm:p-5">
@@ -807,6 +809,7 @@ function HumanizeCard({ article, busy, onAssess }: { article: SeoArticle; busy: 
           {busy ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}{h ? "Re-assess" : "Assess article"}
         </button>
       </div>
+      {error && <div className="mt-3 rounded-xl bg-(--crm-danger-bg) px-3 py-2 text-xs font-medium text-(--crm-danger)">{error}</div>}
       {busy ? (
         <div className="mt-4 flex items-center justify-center gap-2 rounded-xl bg-(--crm-surface) py-8 text-xs font-medium text-(--crm-secondary)"><Loader2 size={16} className="animate-spin text-(--crm-mid)" />Analyzing writing style…</div>
       ) : h ? (
@@ -823,7 +826,7 @@ function HumanizeCard({ article, busy, onAssess }: { article: SeoArticle; busy: 
           {h.notes && <p className="mt-2 text-xs leading-5 text-(--crm-body)">{h.notes}</p>}
         </div>
       ) : (
-        <p className="mt-4 rounded-xl border border-dashed border-(--crm-border) bg-(--crm-surface) px-3 py-4 text-center text-xs text-(--crm-muted)">Belum dinilai — klik Assess article untuk melihat estimasi persentase AI vs Human.</p>
+        <p className="mt-4 rounded-xl border border-dashed border-(--crm-border) bg-(--crm-surface) px-3 py-4 text-center text-xs text-(--crm-muted)">Not assessed yet — click Assess article to see the estimated AI vs Human percentage.</p>
       )}
     </div>
   );
