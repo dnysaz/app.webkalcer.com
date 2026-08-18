@@ -9,7 +9,7 @@ export const MAX_GEMINI_KEYS = 5;
 /** Gemini models used for AI generation, tried in order.
  *  If one model returns an error or is unavailable, the next is tried.
  *  Override the whole list via GEMINI_MODEL env var (comma-separated). */
-const GEMINI_MODELS = (process.env.GEMINI_MODEL || "gemini-2.5-flash,gemini-3.6-flash,gemini-3.5-flash")
+const GEMINI_MODELS = (process.env.GEMINI_MODEL || "gemini-3.6-flash,gemini-2.5-flash,gemini-1.5-flash")
   .split(",")
   .map((m) => m.trim())
   .filter(Boolean);
@@ -67,8 +67,11 @@ export async function callGemini(options: GeminiCallOptions): Promise<string> {
   }
 
   let lastError = "";
-  for (const apiKey of keys) {
-    for (const model of GEMINI_MODELS) {
+
+  // Strategy: try each model first across all keys before moving to the next
+  // model. This avoids burning all keys on an unavailable model.
+  for (const model of GEMINI_MODELS) {
+    for (const apiKey of keys) {
       const res = await fetch(GEMINI_ENDPOINT(apiKey, model), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -96,8 +99,12 @@ export async function callGemini(options: GeminiCallOptions): Promise<string> {
 
       const detail = await res.text().catch(() => "");
       lastError = detail.slice(0, 500);
-      console.error(`Gemini API error (key ${keys.indexOf(apiKey) + 1}, ${model}):`, res.status, lastError);
-      // Keep trying the next key/model.
+      const keyIdx = keys.indexOf(apiKey) + 1;
+      console.error(`Gemini API error (model: ${model}, key: ${keyIdx}):`, res.status, lastError);
+
+      // 400/403 = key is invalid or model is disabled for this key — no point
+      // trying other keys with the same model, skip to next model.
+      if (res.status === 400 || res.status === 403) break;
     }
   }
 
