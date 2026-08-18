@@ -1,0 +1,11 @@
+{
+  "functions": {
+    "src/app/api/seo/article/route.ts": { "maxDuration": 60 },
+    "src/app/api/seo/optimize/route.ts": { "maxDuration": 60 },
+    "src/app/api/seo/swot/route.ts": { "maxDuration": 60 },
+    "src/app/api/seo/humanize/route.ts": { "maxDuration": 60 },
+    "src/app/api/seo/articles/route.ts": { "maxDuration": 60 },
+    "src/app/api/seo/articles/[id]/route.ts": { "maxDuration": 60 },
+    "src/app/api/prd/generate/route.ts": { "maxDuration": 60 }
+  }
+}
