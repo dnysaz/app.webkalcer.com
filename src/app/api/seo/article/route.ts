@@ -15,6 +15,8 @@ export interface ArticleFormData {
   description: string;
   length: ArticleLength;
   style: ArticleStyle;
+  /** Target SEO keyword the article should be optimized for. */
+  keyword: string;
   /** Links pasted by the admin, embedded into the article. */
   links: string;
   /** Output language, e.g. "Indonesian" / "English". */
@@ -62,9 +64,21 @@ const LENGTH_SPECS: Record<ArticleLength, { label: string; words: string; instru
   },
 };
 
-const SYSTEM_PROMPT = `You are an experienced SEO content writer for webkalcer.com. You write like a real human journalist, not like an AI.
+const SYSTEM_PROMPT = `You are an experienced SEO content writer for webkalcer.com. You write articles that RANK and CONVERT — not just read well. A "selling" article answers the reader's real question, builds trust, and gently moves them toward a next step (contact, order, subscribe). You write like a real human journalist, not like an AI.
 
 THE #1 PRIORITY IS SOUNDING HUMAN. AI detectors flag text that is too smooth, too symmetric, too generic. Your writing must read as if a specific person sat down and wrote it.
+
+## SEO rules (make the article rank)
+- Optimize for the TARGET KEYWORD given by the user. Use it naturally in: the H1 title, the first paragraph (within the first 100 words), at least 2-3 H2 subheadings, and sprinkled through the body. Never stuff it — 1.5–2% density max.
+- Include 3-5 related LSI keywords / synonyms naturally in the text (the AI will derive them from the topic + keyword).
+- Write a compelling meta-worthy H1 (contains the keyword, under 60 chars when possible).
+- Match search intent: informational articles inform; commercial articles compare and lead to a decision. If the topic implies the reader wants to buy/choose, include a comparison, pros/cons, or recommendation.
+- Structure for featured snippets: answer a common question directly in the first 1-2 sentences of a section where natural.
+
+## Conversion rules (make the article sell)
+- Give the reader a clear, natural next step near the end (a soft CTA like "konsultasi gratis", "coba demo", "hubungi tim kami" — in the same language as the article). Make it specific and low-pressure, not "hubungi kami sekarang juga".
+- Build E-E-A-T: mention concrete experience, numbers, or real scenarios that show the writer knows the subject. Where the brief allows, cite the provided links as sources.
+- Anticipate objections: address the reader's doubts directly ("kalau budgetnya pas-pasan...", "tapi apakah worth it?") and answer them honestly.
 
 ## Banned patterns (never use any of these)
 - NEVER open with generic hooks like "Dalam era digital", "Di dunia yang serba cepat", "Tidak bisa dipungkiri", "Penting untuk dipahami", "Pada artikel ini", "Apakah kamu tahu", "Di tengah perkembangan zaman".
@@ -90,7 +104,7 @@ THE #1 PRIORITY IS SOUNDING HUMAN. AI detectors flag text that is too smooth, to
 - Output ONLY the article in Markdown: an H1 title, H2 subheadings, short paragraphs, occasional bullets ONLY when a list is genuinely the clearest form.
 - No preamble, no code fences, no "Berikut adalah artikelnya:", no meta commentary.
 
-Before writing, silently imagine one specific person who would read this and what they actually worry about. Write to that person.`;
+Before writing, silently imagine one specific person who would read this and what they actually worry about. Write to that person, and make the article the reason they trust you enough to take the next step.`;
 
 export async function POST(request: Request) {
   if (!(await requireAuth())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -108,6 +122,7 @@ export async function POST(request: Request) {
     const length: ArticleLength = body.length === "short" || body.length === "long" ? body.length : "medium";
     const style: ArticleStyle =
       body.style === "casual" || body.style === "professional" || body.style === "news" || body.style === "humor" || body.style === "research" ? body.style : "professional";
+    const keyword = (body.keyword || "").trim().slice(0, 120);
     const links = (body.links || "").trim();
     const language = (body.language || "Indonesian").trim() || "Indonesian";
 
@@ -115,6 +130,8 @@ export async function POST(request: Request) {
     const styleSpec = STYLE_SPECS[style];
     const userPrompt = [
       `Write a ${spec.label.toLowerCase()} article (${spec.words}) about: ${topic}`,
+      "",
+      keyword ? `## TARGET KEYWORD\n${keyword}\nOptimize the whole article for this keyword (H1, first paragraph, H2s, body) without keyword stuffing.` : "## TARGET KEYWORD\n(none — derive the best primary keyword from the topic)",
       "",
       "## BRIEF",
       description,
@@ -130,7 +147,7 @@ export async function POST(request: Request) {
 
     const markdown = await callGemini({ systemPrompt: SYSTEM_PROMPT, userPrompt, temperature: 1.0 });
 
-    return NextResponse.json({ markdown, topic, length, style, links, language });
+    return NextResponse.json({ markdown, topic, keyword, length, style, links, language });
   } catch (error) {
     console.error("Article generation failed:", error);
     const message = error instanceof Error ? error.message : "Something went wrong while generating the article.";

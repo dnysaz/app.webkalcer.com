@@ -178,6 +178,7 @@ async function runSetupDatabase() {
   )`;
   await sql`ALTER TABLE seo_articles ADD COLUMN IF NOT EXISTS verified boolean NOT NULL DEFAULT false`;
   await sql`ALTER TABLE seo_articles ADD COLUMN IF NOT EXISTS humanize jsonb NOT NULL DEFAULT '{}'::jsonb`;
+  await sql`ALTER TABLE seo_articles ADD COLUMN IF NOT EXISTS keyword text NOT NULL DEFAULT ''`;
 
   await sql`UPDATE invoices SET status = CASE status
     WHEN 'Paid' THEN 'Done'
@@ -600,7 +601,7 @@ export interface DbCounts {
  * Serverless instances cache `setupPromise`; a version bump makes the next
  * call re-run the migration instead of serving the stale cache.
  */
-const SCHEMA_VERSION = 7;
+const SCHEMA_VERSION = 8;
 
 let setupPromise: Promise<DbCounts> | null = null;
 let setupVersion = 0;

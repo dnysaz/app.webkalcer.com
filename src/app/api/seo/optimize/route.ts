@@ -14,12 +14,12 @@ export interface SeoGenResult {
   notes: string;
 }
 
-const SYSTEM_PROMPT = `You are a senior SEO specialist. Given an article, you produce a complete SEO package.
+const SYSTEM_PROMPT = `You are a senior SEO specialist. Given an article and its target keyword, you produce a complete SEO package that helps the article RANK and CONVERT.
 
 Return a STRICT JSON object (no markdown fences, no commentary) with EXACTLY this shape:
 {
-  "title": "SEO title, max 60 characters",
-  "description": "Meta description, 120-155 characters",
+  "title": "SEO title, max 60 characters, includes the target keyword",
+  "description": "Meta description, 120-155 characters, includes the target keyword and a small hook",
   "hashtags": ["#tag1", "#tag2", "#tag3", "#tag4", "#tag5"],
   "preview": {
     "url": "www.domain.com/article-slug",
@@ -31,23 +31,27 @@ Return a STRICT JSON object (no markdown fences, no commentary) with EXACTLY thi
 }
 
 Rules:
-- The score is an estimated SEO score from 0 to 100, based on: keyword presence in title/headings/first paragraph, meta description quality, structure, readability, hashtag relevance, and content depth. Be honest and critical.
+- The TARGET KEYWORD must appear in the title, description, and preview. If no keyword was provided, derive the best primary keyword from the article.
+- The score (0-100) is based on: keyword presence in title/headings/first paragraph, keyword density (aim ~1.5-2%, penalize stuffing), meta description quality, LSI/semantic coverage, structure, readability, hashtag relevance, content depth, and presence of a conversion-oriented element (CTA). Be honest and critical.
 - All text should be in the same language as the article.
-- The notes field must read like an AI re-check: what the AI reviewed and how it could improve.`;
+- The notes field must read like an AI re-check: what the AI reviewed, whether the article uses the keyword well, and how it could improve.`;
 
 export async function POST(request: Request) {
   if (!(await requireAuth())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
     await setupDatabase();
-    const body = (await request.json()) as { title?: string; content?: string };
+    const body = (await request.json()) as { title?: string; content?: string; keyword?: string };
     const title = (body.title || "").trim();
     const content = (body.content || "").trim();
+    const keyword = (body.keyword || "").trim();
     if (!content) {
       return NextResponse.json({ error: "Article content is required." }, { status: 400 });
     }
 
     const userPrompt = [
       `Generate the full SEO package for this article.`,
+      "",
+      keyword ? `## TARGET KEYWORD\n${keyword}` : "## TARGET KEYWORD\n(derive the best primary keyword from the article)",
       "",
       `## ARTICLE TITLE\n${title || "(no title provided)"}`,
       "",

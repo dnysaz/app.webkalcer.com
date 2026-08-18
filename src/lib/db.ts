@@ -115,6 +115,7 @@ export interface SeoArticleRow {
   content: string;
   length: string;
   links: string;
+  keyword: string;
   seo: unknown | null;
   swot: unknown | null;
   humanize: unknown | null;
@@ -295,6 +296,7 @@ export function rowToSeoArticle(row: SeoArticleRow): SeoArticle {
     content: row.content,
     length: (row.length as SeoArticle["length"]) || "medium",
     links: row.links ?? "",
+    keyword: row.keyword ?? "",
     seo: asSeoData(row.seo),
     swot: asSwotData(row.swot),
     humanize: asHumanizeData(row.humanize),

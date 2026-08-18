@@ -72,10 +72,10 @@ export function ContentSeoView() {
   const fileRef = useRef<HTMLInputElement>(null);
 
   // ---- Article form ----
-  const [form, setForm] = useState<ArticleFormData>({ topic: "", description: "", length: "medium", style: "professional", links: "", language: "Indonesian" });
+  const [form, setForm] = useState<ArticleFormData>({ topic: "", description: "", length: "medium", style: "professional", keyword: "", links: "", language: "Indonesian" });
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
-  const [draft, setDraft] = useState<{ markdown: string; topic: string; length: ArticleLength; links: string } | null>(null);
+  const [draft, setDraft] = useState<{ markdown: string; topic: string; length: ArticleLength; links: string; keyword: string } | null>(null);
 
   // ---- SEO tab ----
   const [seoArticleId, setSeoArticleId] = useState("");
@@ -145,7 +145,7 @@ export function ContentSeoView() {
       });
       const data = (await res.json()) as { markdown?: string; error?: string };
       if (!res.ok) throw new Error(data.error || "Failed to generate the article.");
-      setDraft({ markdown: data.markdown || "", topic: form.topic.trim(), length: form.length, links: form.links.trim() });
+      setDraft({ markdown: data.markdown || "", topic: form.topic.trim(), length: form.length, links: form.links.trim(), keyword: form.keyword.trim() });
       setDraftMode(true);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong. Please try again.");
@@ -165,6 +165,7 @@ export function ContentSeoView() {
         content: draft.markdown,
         length: draft.length,
         links: draft.links,
+        keyword: draft.keyword,
         seo: null,
         swot: null,
         humanize: null,
@@ -199,7 +200,7 @@ export function ContentSeoView() {
       const res = await fetch("/api/seo/optimize", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: selectedArticle.title, content: selectedArticle.content }),
+        body: JSON.stringify({ title: selectedArticle.title, content: selectedArticle.content, keyword: selectedArticle.keyword }),
       });
       const data = (await res.json()) as SeoGenResult & { error?: string };
       if (!res.ok) throw new Error(data.error || "Failed to generate SEO.");
@@ -229,7 +230,7 @@ export function ContentSeoView() {
       const res = await fetch("/api/seo/swot", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title: selectedArticle.title, content: selectedArticle.content }),
+        body: JSON.stringify({ title: selectedArticle.title, content: selectedArticle.content, keyword: selectedArticle.keyword }),
       });
       const data = (await res.json()) as SwotResult & { error?: string };
       if (!res.ok) throw new Error(data.error || "Failed to generate SWOT.");
@@ -441,6 +442,11 @@ export function ContentSeoView() {
                   <input value={form.topic} onChange={(e) => set("topic", e.target.value)} placeholder="e.g. Tips memilih web hosting untuk UMKM" className={inputCls} />
                 </div>
                 <div>
+                  <Label>Target keyword (SEO)</Label>
+                  <input value={form.keyword} onChange={(e) => set("keyword", e.target.value)} placeholder="e.g. web hosting murah untuk UMKM" className={inputCls} />
+                  <p className="mt-1 text-[11px] text-(--crm-muted)">Artikel dioptimalkan untuk keyword ini supaya bisa ranking & menjual. Kosongkan untuk dibiarkan AI menentukan.</p>
+                </div>
+                <div>
                   <Label>Description *</Label>
                   <textarea value={form.description} onChange={(e) => set("description", e.target.value)} rows={5} placeholder="Jelaskan isi artikel yang kamu mau, target pembaca, poin-poin penting…" className={areaCls} />
                 </div>
@@ -625,6 +631,7 @@ export function ContentSeoView() {
                 <thead>
                   <tr className="text-[10px] font-semibold uppercase tracking-[.12em] text-(--crm-label)">
                     <th className="px-6 py-4">Title</th>
+                    <th className="px-4 py-4">Keyword</th>
                     <th className="px-4 py-4">Length</th>
                     <th className="px-4 py-4">SEO</th>
                     <th className="px-4 py-4">SWOT</th>
@@ -639,6 +646,7 @@ export function ContentSeoView() {
                       <td className="max-w-[260px] px-6 py-3.5">
                         <button onClick={() => setDetail(article)} className="block w-full truncate text-left text-sm font-semibold text-(--crm-fg) transition-colors hover:text-(--crm-brand)" title="Open article details">{article.title}</button>
                       </td>
+                      <td className="max-w-[180px] px-4 py-3.5 text-xs text-(--crm-brand)">{article.keyword || <span className="text-(--crm-faint)">—</span>}</td>
                       <td className="px-4 py-3.5 text-xs capitalize text-(--crm-secondary)">{article.length}</td>
                       <td className="px-4 py-3.5 text-xs">{article.seo ? <ScorePill score={article.seo.score} /> : <span className="text-(--crm-faint)">—</span>}</td>
                       <td className="px-4 py-3.5 text-xs">{article.swot ? <ScorePill score={article.swot.seoScore} /> : <span className="text-(--crm-faint)">—</span>}</td>
@@ -838,6 +846,7 @@ function ArticleDetailBody({ article }: { article: SeoArticle }) {
     <>
       <div className="flex flex-wrap items-center gap-2">
         <span className="rounded-full border border-(--crm-border-input) px-2.5 py-1 text-[11px] font-semibold capitalize text-(--crm-secondary)">{article.length}</span>
+        {article.keyword && <span className="rounded-full border border-(--crm-border-input) bg-(--crm-soft) px-2.5 py-1 text-[11px] font-semibold text-(--crm-brand)">{article.keyword}</span>}
         {article.verified ? (
           <span className="rounded-full border border-(--crm-st-done-text) bg-(--crm-st-done-bg) px-2.5 py-1 text-[11px] font-semibold text-(--crm-st-done-text)"><Check size={12} className="mr-1 inline" />Verified</span>
         ) : (

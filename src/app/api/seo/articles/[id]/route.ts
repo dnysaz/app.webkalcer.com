@@ -14,6 +14,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       content?: string;
       length?: string;
       links?: string;
+      keyword?: string;
       seo?: unknown;
       swot?: unknown;
       humanize?: unknown;
@@ -24,11 +25,12 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     const content = typeof body.content === "string" ? body.content : undefined;
     const length = body.length === "short" || body.length === "long" || body.length === "medium" ? body.length : undefined;
     const links = typeof body.links === "string" ? body.links.slice(0, 5000) : undefined;
+    const keyword = typeof body.keyword === "string" ? body.keyword.slice(0, 120) : undefined;
     const seo = body.seo !== undefined ? JSON.stringify(body.seo) : undefined;
     const swot = body.swot !== undefined ? JSON.stringify(body.swot) : undefined;
     const humanize = body.humanize !== undefined ? JSON.stringify(body.humanize) : undefined;
     const verified = typeof body.verified === "boolean" ? body.verified : undefined;
-    if (title === undefined && content === undefined && length === undefined && links === undefined && seo === undefined && swot === undefined && humanize === undefined && verified === undefined) {
+    if (title === undefined && content === undefined && length === undefined && links === undefined && keyword === undefined && seo === undefined && swot === undefined && humanize === undefined && verified === undefined) {
       return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
     }
     await sql`
@@ -37,6 +39,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
         content = COALESCE(${content ?? null}, content),
         length = COALESCE(${length ?? null}, length),
         links = COALESCE(${links ?? null}, links),
+        keyword = COALESCE(${keyword ?? null}, keyword),
         seo = COALESCE(${seo ?? null}::jsonb, seo),
         swot = COALESCE(${swot ?? null}::jsonb, swot),
         humanize = COALESCE(${humanize ?? null}::jsonb, humanize),

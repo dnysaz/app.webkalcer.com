@@ -822,7 +822,7 @@ async function chartDonutDataUrl(score: number): Promise<string | null> {
  * Builds an article PDF. When `seo`/`swot` are provided they are appended as
  * an SEO/SWOT report section on a new page.
  */
-export async function buildArticlePdf(article: Pick<SeoArticle, "title" | "content" | "createdAt">, seo?: SeoData | null, swot?: SwotData | null): Promise<jsPDF> {
+export async function buildArticlePdf(article: Pick<SeoArticle, "title" | "content" | "createdAt"> & { keyword?: string }, seo?: SeoData | null, swot?: SwotData | null): Promise<jsPDF> {
   refreshTheme();
   const doc = new jsPDF();
   await ensureFonts(doc);
@@ -975,6 +975,19 @@ export async function buildArticlePdf(article: Pick<SeoArticle, "title" | "conte
     doc.setTextColor(...DARK);
     doc.text("SEO Report", MARGIN, y);
     y += 16;
+
+    // Target keyword line.
+    if (article.keyword) {
+      setFontSafe(doc, "DMSansSemi");
+      doc.setFontSize(8);
+      doc.setTextColor(...MUTED);
+      doc.text("TARGET KEYWORD", MARGIN, y + 3);
+      setFontSafe(doc, "DMSans", "bold");
+      doc.setFontSize(11);
+      doc.setTextColor(...GREEN);
+      doc.text(article.keyword, MARGIN, y + 9);
+      y += 16;
+    }
 
     // Score donut — Chart.js image when available, manual fallback otherwise.
     const cx = MARGIN + 26;

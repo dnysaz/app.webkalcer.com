@@ -37,15 +37,18 @@ export async function POST(request: Request) {
   if (!(await requireAuth())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
     await setupDatabase();
-    const body = (await request.json()) as { title?: string; content?: string };
+    const body = (await request.json()) as { title?: string; content?: string; keyword?: string };
     const title = (body.title || "").trim();
     const content = (body.content || "").trim();
+    const keyword = (body.keyword || "").trim();
     if (!content) {
       return NextResponse.json({ error: "Article content is required." }, { status: 400 });
     }
 
     const userPrompt = [
       `Run a SWOT analysis and SEO scoring on this article.`,
+      "",
+      keyword ? `## TARGET KEYWORD\n${keyword}` : "## TARGET KEYWORD\n(derived from the article)",
       "",
       `## ARTICLE TITLE\n${title || "(no title provided)"}`,
       "",

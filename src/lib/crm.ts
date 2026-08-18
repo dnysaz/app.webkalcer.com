@@ -174,6 +174,8 @@ export type SeoArticle = {
   length: ArticleLength;
   /** Links pasted by the admin to be embedded in the article (comma/newline separated). */
   links: string;
+  /** Target SEO keyword the article is optimized for. */
+  keyword: string;
   seo: SeoData | null;
   swot: SwotData | null;
   humanize: HumanizeData | null;
