@@ -7,6 +7,7 @@ import { useSettings } from "@/components/SettingsProvider";
 import { useAuth } from "@/components/AuthProvider";
 import { FONT_SIZES, THEMES } from "@/lib/settings";
 import type { FontSizeKey, ThemeKey } from "@/lib/settings";
+import { MAX_GEMINI_KEYS } from "@/lib/gemini";
 
 export function SettingsView() {
   const [toast, setToast] = useState("");
@@ -159,31 +160,46 @@ function WebsiteSection({ onToast }: { onToast: (message: string) => void }) {
 
 function AiSection({ onToast }: { onToast: (message: string) => void }) {
   const { settings, updateSettings } = useSettings();
-  const [keys, setKeys] = useState<string[]>(() => Array.from({ length: Math.max(1, settings.geminiKeyCount) }, () => ""));
+  // Start with at least one empty row; if keys are stored, show that many
+  // empty rows so the admin sees the slots.
+  const [keys, setKeys] = useState<string[]>(() =>
+    Array.from({ length: Math.max(1, settings.geminiKeyCount) }, () => ""),
+  );
   const [busy, setBusy] = useState(false);
-  const keyConfigured = settings.hasGeminiKey;
-  const filledKeys = keys.flatMap((k) => k.split(/\r?\n/).map((s) => s.trim()).filter(Boolean));
+
+  const filledKeys = keys.map((k) => k.trim()).filter(Boolean);
   const changed = filledKeys.length > 0;
   const hasDuplicate = new Set(filledKeys).size !== filledKeys.length;
+  const storedCount = settings.geminiKeyCount;
 
-  function addKey() {
-    if (keys.length >= 5) return;
-    setKeys((prev) => [...prev, ""]);
-  }
-  function removeKey(index: number) {
-    setKeys((prev) => prev.filter((_, i) => i !== index));
-  }
-  /** Set one row's value; pasting multiple lines auto-expands into separate rows. */
+  /** Set one slot's value; typing in the last slot auto-adds an empty one. */
   function setKey(index: number, value: string) {
-    const parts = value.split(/\r?\n/);
     setKeys((prev) => {
+      const parts = value.split(/\r?\n/).map((s) => s.trim());
       const next = [...prev];
-      next[index] = parts[0];
-      // Insert any additional pasted lines after this row (max 5 total).
+      next[index] = parts[0] ?? "";
+      // Auto-expand when typing into the last slot, or when pasting
+      // multiple lines (max 5).
+      const wantEmptyTail = next.length < 5 && (next[next.length - 1]?.trim() !== "" || parts.length > 1);
+      if (wantEmptyTail) {
+        next.push("");
+      }
       for (let i = 1; i < parts.length && next.length < 5; i++) {
         next.splice(index + i, 0, parts[i]);
       }
+      // Trim trailing empty rows except keep one.
+      while (next.length > 1 && next[next.length - 1].trim() === "") {
+        next.pop();
+      }
+      if (next.length === 0) next.push("");
       return next.slice(0, 5);
+    });
+  }
+
+  function removeKey(index: number) {
+    setKeys((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      return next.length ? next : [""];
     });
   }
 
@@ -197,11 +213,10 @@ function AiSection({ onToast }: { onToast: (message: string) => void }) {
     try {
       const result = await updateSettings({ geminiApiKey: value });
       const count = result?.geminiKeyCount ?? filledKeys.length;
-      // Keep the entered keys visible; only pad/trim rows to match the
-      // stored count so the admin can add more keys without re-entering.
+      // Never clear what the admin typed; just align rows with the count.
       setKeys((prev) => {
-        const kept = prev.filter((k) => k.trim());
-        const next = Array.from({ length: Math.max(count, kept.length, 1) }, (_, i) => kept[i] ?? "");
+        const filled = prev.filter((k) => k.trim());
+        const next = Array.from({ length: Math.max(count, filled.length, 1) }, (_, i) => filled[i] ?? "");
         return next.slice(0, 5);
       });
       onToast(value ? `${count} Gemini API key${count > 1 ? "s" : ""} saved.` : "Gemini API key cleared.");
@@ -214,33 +229,47 @@ function AiSection({ onToast }: { onToast: (message: string) => void }) {
 
   return (
     <SectionCard icon={KeyRound} title="AI · API keys" description="Google Gemini API keys used to power all AI features — PRD generator, Content & SEO articles, SEO reports, SWOT analysis, and humanize scoring. Add up to 5 keys; if one hits a limit or fails, the next is used automatically.">
-      <div className="space-y-3">
-        <label className="block text-[10px] font-semibold uppercase tracking-[.12em] text-(--crm-label)">Gemini API keys</label>
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <label className="text-[10px] font-semibold uppercase tracking-[.12em] text-(--crm-label)">Gemini API keys</label>
+          <span className="rounded-full border border-(--crm-border-input) px-2.5 py-1 text-[11px] font-semibold text-(--crm-secondary)">
+            {filledKeys.length ? `${filledKeys.length} to save` : storedCount ? `${storedCount} saved` : "None"} · {keys.length}/{MAX_GEMINI_KEYS} slots
+          </span>
+        </div>
+
         <div className="space-y-2">
           {keys.map((key, index) => (
-            <div key={index} className="flex gap-2">
+            <div key={index} className="flex items-center gap-2">
+              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-(--crm-soft) text-[11px] font-bold text-(--crm-text)">{index + 1}</span>
               <input
                 type="text"
                 value={key}
                 onChange={(e) => setKey(index, e.target.value)}
-                placeholder={index === 0 && keyConfigured && !key.trim() ? "••••••••••••••••  (key already set)" : "AIza… or AQ.…"}
+                placeholder={index === 0 && storedCount > 0 && !key.trim() ? "Key already saved — add another to rotate" : `Paste API key ${index + 1}…`}
                 autoComplete="off"
                 spellCheck={false}
                 className="h-10 flex-1 rounded-lg border border-(--crm-border-input) bg-(--crm-surface) px-3 font-mono text-sm outline-none transition-colors placeholder:text-(--crm-placeholder) focus:border-(--crm-mid) focus:ring-2 focus:ring-(--crm-soft)"
               />
               {keys.length > 1 && (
-                <button onClick={() => removeKey(index)} className="flex h-10 items-center gap-1.5 rounded-lg border border-(--crm-border-input) px-3 text-xs font-semibold text-(--crm-danger) transition-colors hover:bg-(--crm-danger-bg)" title="Remove key" aria-label="Remove key"><X size={15} /></button>
+                <button onClick={() => removeKey(index)} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-(--crm-border-input) text-(--crm-danger) transition-colors hover:bg-(--crm-danger-bg)" title={`Remove key ${index + 1}`} aria-label={`Remove key ${index + 1}`}><X size={15} /></button>
               )}
             </div>
           ))}
         </div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={addKey} disabled={keys.length >= 5} className="flex items-center gap-1.5 rounded-lg border border-(--crm-border-input) px-3 py-2 text-xs font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover) disabled:cursor-not-allowed disabled:opacity-50"><Plus size={14} />Add API key ({keys.length}/5)</button>
-          <button onClick={() => void saveKey()} disabled={busy || hasDuplicate || (!changed && !keyConfigured)} className="flex items-center gap-1.5 rounded-lg bg-(--crm-primary) px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-(--crm-dark) disabled:cursor-not-allowed disabled:opacity-60"><KeyRound size={14} />{busy ? "Saving…" : changed ? `Save ${filledKeys.length} key${filledKeys.length > 1 ? "s" : ""}` : "Clear"}</button>
+
+        {filledKeys.length === 0 && keys.length < 5 && (
+          <button onClick={() => setKeys((prev) => [...prev, ""])} disabled={keys.length >= 5} className="flex items-center gap-1.5 rounded-lg border border-dashed border-(--crm-border-input) px-3 py-2 text-xs font-semibold text-(--crm-brand) transition-colors hover:bg-(--crm-hover) disabled:cursor-not-allowed disabled:opacity-50"><Plus size={14} />Add API key slot</button>
+        )}
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => void saveKey()} disabled={busy || hasDuplicate || (!changed && storedCount === 0)} className="flex items-center gap-1.5 rounded-lg bg-(--crm-primary) px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-(--crm-dark) disabled:cursor-not-allowed disabled:opacity-60">
+            <KeyRound size={14} />{busy ? "Saving…" : changed ? `Save ${filledKeys.length} key${filledKeys.length > 1 ? "s" : ""}` : storedCount > 0 ? "Clear keys" : "Save"}
+          </button>
+          <span className="text-[11px] text-(--crm-muted)">Saved in database: <span className={`font-semibold ${storedCount > 0 ? "text-(--crm-mid)" : "text-(--crm-danger)"}`}>{storedCount} key{storedCount !== 1 ? "s" : ""}</span></span>
         </div>
+
         {hasDuplicate && <p className="text-[11px] font-semibold text-(--crm-danger)">Duplicate API keys detected — each key must be unique.</p>}
-        <p className="text-[11px] leading-5 text-(--crm-muted)">Get free keys at <span className="font-mono text-(--crm-brand)">aistudio.google.com/apikey</span>. Each input holds one key — add up to 5. When one key hits a rate limit or error, the next is used automatically. Keys are stored securely in the database, never sent to the browser.</p>
-        <p className="text-[11px] leading-5 text-(--crm-muted)">Status: <span className={`font-semibold ${keyConfigured ? "text-(--crm-mid)" : "text-(--crm-danger)"}`}>{keyConfigured ? "API keys configured" : "No API key configured"}</span></p>
+        <p className="text-[11px] leading-5 text-(--crm-muted)">Get free keys at <span className="font-mono text-(--crm-brand)">aistudio.google.com/apikey</span>. Each slot holds one key — up to 5. When one key hits a rate limit or error, the next is used automatically. Keys are stored securely in the database, never sent to the browser.</p>
       </div>
     </SectionCard>
   );
