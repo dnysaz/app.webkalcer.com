@@ -202,7 +202,7 @@ function AiSection({ onToast }: { onToast: (message: string) => void }) {
                 type={show ? "text" : "password"}
                 value={key}
                 onChange={(e) => setKey(index, e.target.value)}
-                placeholder={keyConfigured && !key.trim() ? "••••••••••••••••  (key already set)" : "AIza…"}
+                placeholder={index === 0 && keyConfigured && !key.trim() ? "••••••••••••••••  (key already set)" : "AIza…"}
                 autoComplete="off"
                 className="h-10 flex-1 rounded-lg border border-(--crm-border-input) bg-(--crm-surface) px-3 font-mono text-sm outline-none transition-colors placeholder:text-(--crm-placeholder) focus:border-(--crm-mid) focus:ring-2 focus:ring-(--crm-soft)"
               />
