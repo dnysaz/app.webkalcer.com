@@ -196,9 +196,10 @@ function AiSection({ onToast }: { onToast: (message: string) => void }) {
     const value = filledKeys.join("\n");
     setBusy(true);
     try {
-      await updateSettings({ geminiApiKey: value });
-      setKeys(Array.from({ length: Math.max(1, filledKeys.length) }, () => ""));
-      onToast(value ? `${filledKeys.length} Gemini API key${filledKeys.length > 1 ? "s" : ""} saved.` : "Gemini API key cleared.");
+      const result = await updateSettings({ geminiApiKey: value });
+      const count = result?.geminiKeyCount ?? filledKeys.length;
+      setKeys(Array.from({ length: Math.max(1, count) }, () => ""));
+      onToast(value ? `${count} Gemini API key${count > 1 ? "s" : ""} saved.` : "Gemini API key cleared.");
     } catch (err) {
       onToast(err instanceof Error ? err.message : "Failed to save API key.");
     } finally {

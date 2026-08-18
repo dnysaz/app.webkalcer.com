@@ -10,7 +10,7 @@ export type SettingsPatch = Partial<SiteSettings> & { geminiApiKey?: string };
 
 type SettingsContextValue = {
   settings: SiteSettings;
-  updateSettings: (patch: SettingsPatch) => Promise<void>;
+  updateSettings: (patch: SettingsPatch) => Promise<{ hasGeminiKey?: boolean; geminiKeyCount?: number }>;
 };
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -75,6 +75,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       hasGeminiKey: typeof data.hasGeminiKey === "boolean" ? data.hasGeminiKey : prev.hasGeminiKey,
       geminiKeyCount: typeof data.geminiKeyCount === "number" ? data.geminiKeyCount : prev.geminiKeyCount,
     }));
+    return data;
   }, []);
 
   const value = useMemo(() => ({ settings, updateSettings }), [settings, updateSettings]);
