@@ -58,7 +58,17 @@ export async function setSession(email: string): Promise<void> {
 
 export async function clearSession(): Promise<void> {
   const store = await cookies();
-  store.delete(AUTH_COOKIE);
+  // Delete with the exact same attributes used by setSession (Secure + path=/).
+  // A bare `store.delete()` drops Secure, so browsers reject the __Host- prefixed
+  // deletion cookie and the original cookie survives — the user stays logged in.
+  store.set(AUTH_COOKIE, "", {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 0,
+    expires: new Date(0),
+  });
 }
 
 export async function requireAuth(): Promise<boolean> {
