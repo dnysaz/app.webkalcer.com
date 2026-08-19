@@ -26,7 +26,7 @@ import { ShareButton } from "@/components/crm/ShareLinkModal";
 import { ConfirmModal } from "@/components/crm/ConfirmModal";
 import { usePaymentSettings } from "@/components/crm/usePaymentSettings";
 import { CustomerDetailBody, InvoiceDetailBody, QuoteDetailBody } from "@/components/crm/DetailBodies";
-import type { Customer, Invoice, Quote, WebAsset } from "@/lib/crm";
+import type { Customer, Invoice, InvoiceItem, Quote, WebAsset } from "@/lib/crm";
 import { computeTotals, formatDate, formatDateLong, formatPhones, formatRupiah, formatRupiahShort, nextNumber, uid } from "@/lib/crm";
 import { buildCustomerPdf, buildInvoicePdf, buildQuotePdf } from "@/lib/pdf";
 
@@ -34,11 +34,12 @@ const stageTone: Record<string, string> = {
   Prospect: "bg-(--crm-st-draft-bg) text-(--crm-st-draft-text)",
   Active: "bg-(--crm-st-active-bg) text-(--crm-st-active-text)",
   Suspend: "bg-(--crm-st-process-bg) text-(--crm-st-process-text)",
-  Cancel: "bg-(--crm-st-cancel-bg) text-(--crm-st-cancel-text)",
-  // legacy statuses (kept for old data)
-  VIP: "bg-(--crm-st-process-bg) text-(--crm-st-process-text)",
-  Inactive: "bg-(--crm-st-cancel-bg) text-(--crm-st-cancel-text)",
+  Cancel: "bg-(--crm-danger-bg) text-(--crm-danger)",
 };
+
+const CUSTOMER_STATUSES = ["Prospect", "Active", "Suspend", "Cancel"] as const;
+const INVOICE_STATUSES = ["Draft", "Active", "Process", "Done", "Cancel"] as const;
+const QUOTE_STATUSES = ["Draft", "Active", "Process", "Done", "Cancel"] as const;
 
 const avatarTone: Record<string, string> = {
   Prospect: "bg-(--crm-avatar-bg) text-(--crm-avatar-text)",
@@ -78,18 +79,31 @@ function daysUntil(iso: string): number {
   return Math.ceil((exp.getTime() - now.getTime()) / 86400000);
 }
 
-function StatCard({ label, value, badge, note, icon: Icon, accent }: { label: string; value: string; badge: string; note: string; icon: typeof DollarSign; accent: string }) {
+function StatCard({ label, value, badge, note, icon: Icon, accent, onClick }: { label: string; value: string; badge: string; note: string; icon: typeof DollarSign; accent: string; onClick?: () => void }) {
   return (
-    <div className="group rounded-2xl border border-(--crm-border) bg-(--crm-panel) p-5 shadow-[0_8px_30px_rgba(32,54,49,.04)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgba(32,54,49,.09)]">
+    <button type="button" onClick={onClick} className="group rounded-2xl border border-(--crm-border) bg-(--crm-panel) p-5 text-left shadow-[0_8px_30px_rgba(32,54,49,.04)] transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_14px_34px_rgba(32,54,49,.09)]">
       <div className="flex items-start justify-between">
         <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${accent}`}><Icon size={18} strokeWidth={2.2} /></div>
         <span className="rounded-full bg-(--crm-st-done-bg) px-2 py-1 text-[11px] font-semibold text-(--crm-st-done-text)">{badge}</span>
       </div>
       <p className="mt-5 text-[12px] font-medium uppercase tracking-[.12em] text-(--crm-secondary)">{label}</p>
-      <p className="mt-1 text-[28px] font-semibold tracking-[-.04em] text-(--crm-fg)">{value}</p>
+      <div className="mt-1 flex items-center gap-2">
+        <p className="text-[28px] font-semibold tracking-[-.04em] text-(--crm-fg)">{value}</p>
+        {onClick && <span className="rounded-md bg-(--crm-surface) px-1.5 py-0.5 text-[10px] font-semibold text-(--crm-muted)">view details</span>}
+      </div>
       <p className="mt-1 text-xs text-(--crm-muted)">{note}</p>
-    </div>
+    </button>
   );
+}
+
+/** Aggregate count (customers/products) or won/committed value (invoices/quotes) per month. */
+function monthlySums(months: Array<{ key: string; label: string }>, docs: Array<{ issueDate: string; status: string; items: InvoiceItem[]; discount: number; tax: number }>): Array<{ key: string; label: string; count: number; won: number; committed: number }> {
+  return months.map((m) => {
+    const rows = docs.filter((d) => d.issueDate.slice(0, 7) === m.key);
+    const won = rows.filter((d) => d.status === "Done").reduce((sum, d) => sum + computeTotals(d.items, d.discount, d.tax).total, 0);
+    const committed = rows.filter((d) => d.status !== "Cancel").reduce((sum, d) => sum + computeTotals(d.items, d.discount, d.tax).total, 0);
+    return { ...m, count: rows.length, won, committed: committed - won };
+  });
 }
 
 export function CRMBoard() {
@@ -109,6 +123,7 @@ export function CRMBoard() {
   const [confirmDeleteQuote, setConfirmDeleteQuote] = useState<Quote | null>(null);
   const [confirmProcessQuote, setConfirmProcessQuote] = useState<Quote | null>(null);
   const [expiringDetail, setExpiringDetail] = useState<WebAsset | null>(null);
+  const [statsDetail, setStatsDetail] = useState<"customers" | "revenue" | "quotes" | "products" | null>(null);
   const [latestTab, setLatestTab] = useState<"customers" | "invoices" | "quotes">("customers");
 
   const customerById = useMemo(() => new Map(customers.map((c) => [c.id, c])), [customers]);
@@ -178,6 +193,49 @@ export function CRMBoard() {
     const won = source.filter((doc) => doc.status === "Done").reduce((sum, doc) => sum + computeTotals(doc.items, doc.discount, doc.tax).total, 0);
     return { total, won };
   }, [chartSource, invoices, quotes]);
+
+  // ---- Detail data for the four clickable stat cards ----
+  const statsCustomers = useMemo(() => {
+    const byStatus = CUSTOMER_STATUSES.map((status) => ({ label: status, count: customers.filter((c) => c.status === status).length, value: 0 }));
+    const byMonth = months.map((m) => ({ ...m, count: customers.filter((c) => c.createdAt.slice(0, 7) === m.key).length, won: 0, committed: 0 }));
+    const latest = [...customers].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
+    return { byStatus, byMonth, latest };
+  }, [customers, months]);
+
+  const statsRevenue = useMemo(() => {
+    const byStatus = INVOICE_STATUSES.map((status) => {
+      const items = invoices.filter((i) => i.status === status);
+      return { label: status, count: items.length, value: items.reduce((sum, i) => sum + computeTotals(i.items, i.discount, i.tax).total, 0) };
+    });
+    const byMonth = monthlySums(months, invoices);
+    const latest = invoices.filter((i) => i.status === "Done").sort((a, b) => new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime()).slice(0, 5);
+    return { byStatus, byMonth, latest };
+  }, [invoices, months]);
+
+  const statsQuotes = useMemo(() => {
+    const byStatus = QUOTE_STATUSES.map((status) => {
+      const items = quotes.filter((q) => q.status === status);
+      return { label: status, count: items.length, value: items.reduce((sum, q) => sum + computeTotals(q.items, q.discount, q.tax).total, 0) };
+    });
+    const byMonth = monthlySums(months, quotes);
+    const latest = quotes.filter((q) => q.status === "Active" || q.status === "Process").sort((a, b) => new Date(b.issueDate).getTime() - new Date(a.issueDate).getTime()).slice(0, 5);
+    return { byStatus, byMonth, latest };
+  }, [quotes, months]);
+
+  const statsProducts = useMemo(() => {
+    const promoProducts = products.filter((p) => p.promo);
+    const regularProducts = products.filter((p) => !p.promo);
+    const byMonth = months.map((m) => ({ ...m, count: products.filter((p) => p.createdAt.slice(0, 7) === m.key).length, won: 0, committed: 0 }));
+    const latest = [...products].sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()).slice(0, 5);
+    return {
+      distribution: [
+        { label: "On promo", count: promoProducts.length, value: promoProducts.reduce((sum, p) => sum + p.price, 0) },
+        { label: "Regular", count: regularProducts.length, value: regularProducts.reduce((sum, p) => sum + p.price, 0) },
+      ],
+      byMonth,
+      latest,
+    };
+  }, [products, months]);
 
   // ---- Expiring assets: domains/hosting due within 30 days (or already expired) ----
   const expiringAssets = useMemo(() => {
@@ -259,10 +317,10 @@ export function CRMBoard() {
       <section className="crm-rise flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><h2 className="text-[30px] font-semibold tracking-[-.05em] sm:text-[36px]">Revenue overview</h2><p className="mt-1 text-sm text-(--crm-secondary)">Live summary from customers, invoices, quotes, and products.</p></div><div className="flex items-center gap-2"><button onClick={() => announce("Dashboard options opened")} className="rounded-xl border border-(--crm-border) bg-(--crm-panel) p-2.5 text-(--crm-secondary) hover:bg-(--crm-hover)" aria-label="More options"><MoreHorizontal size={18} /></button></div></section>
 
       <section className="crm-rise crm-delay-1 mt-7 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <StatCard label="Total customers" value={String(customers.length)} badge={`${stats.customerPct}% active`} note={`${customers.filter((c) => c.status === "Active").length} active in database`} icon={Users} accent="bg-(--crm-st-done-bg) text-(--crm-st-done-text)" />
-        <StatCard label="Closed revenue" value={formatRupiahShort(doneInvoiceValue)} badge={`${stats.invoiceDonePct}% of ${invoices.length} invoices`} note={`${invoices.filter((i) => i.status === "Done").length} paid · ${formatRupiahShort(totalInvoiceValue)} total billed`} icon={DollarSign} accent="bg-(--crm-st-process-bg) text-(--crm-st-process-text)" />
-        <StatCard label="Open quotes" value={formatRupiahShort(openQuoteValue)} badge={`${stats.quoteOpenPct}% open`} note={`${quotes.filter((q) => q.status === "Active" || q.status === "Process").length} of ${quotes.length} quotes`} icon={ScrollText} accent="bg-(--crm-st-draft-bg) text-(--crm-st-draft-text)" />
-        <StatCard label="Products" value={String(products.length)} badge={`${stats.promoPct}% promo`} note={`${products.filter((p) => p.promo).length} on promo · ${formatRupiahShort(products.reduce((sum, p) => sum + p.price, 0))} catalog`} icon={Package} accent="bg-(--crm-st-active-bg) text-(--crm-st-active-text)" />
+        <StatCard label="Total customers" value={String(customers.length)} badge={`${stats.customerPct}% active`} note={`${customers.filter((c) => c.status === "Active").length} active in database`} icon={Users} accent="bg-(--crm-st-done-bg) text-(--crm-st-done-text)" onClick={() => setStatsDetail("customers")} />
+        <StatCard label="Closed revenue" value={formatRupiahShort(doneInvoiceValue)} badge={`${stats.invoiceDonePct}% of ${invoices.length} invoices`} note={`${invoices.filter((i) => i.status === "Done").length} paid · ${formatRupiahShort(totalInvoiceValue)} total billed`} icon={DollarSign} accent="bg-(--crm-st-process-bg) text-(--crm-st-process-text)" onClick={() => setStatsDetail("revenue")} />
+        <StatCard label="Open quotes" value={formatRupiahShort(openQuoteValue)} badge={`${stats.quoteOpenPct}% open`} note={`${quotes.filter((q) => q.status === "Active" || q.status === "Process").length} of ${quotes.length} quotes`} icon={ScrollText} accent="bg-(--crm-st-draft-bg) text-(--crm-st-draft-text)" onClick={() => setStatsDetail("quotes")} />
+        <StatCard label="Products" value={String(products.length)} badge={`${stats.promoPct}% promo`} note={`${products.filter((p) => p.promo).length} on promo · ${formatRupiahShort(products.reduce((sum, p) => sum + p.price, 0))} catalog`} icon={Package} accent="bg-(--crm-st-active-bg) text-(--crm-st-active-text)" onClick={() => setStatsDetail("products")} />
       </section>
 
       <section className="crm-rise crm-delay-2 mt-5 grid gap-5 xl:grid-cols-[1.55fr_1fr]">
@@ -382,6 +440,136 @@ export function CRMBoard() {
             <div className={`mt-5 rounded-xl border p-4 text-xs leading-relaxed ${expired ? "border-(--crm-danger-border) bg-(--crm-danger-bg) text-(--crm-danger)" : "border-(--crm-border) bg-(--crm-surface) text-(--crm-secondary)"}`}>
               {expired ? `This ${expiringDetail.type} expired on ${formatDate(expiringDetail.expiryDate)}. Contact ${cust?.name ?? "the customer"} right away and create the next year's invoice.` : `This ${expiringDetail.type} expires in ${days} days. Contact ${cust?.name ?? "the customer"} to renew and create the next year's invoice.`}
             </div>
+          </RightDrawer>
+        );
+      })()}
+
+      {statsDetail && (() => {
+        const config = {
+          customers: { icon: Users, accent: "bg-(--crm-st-done-bg) text-(--crm-st-done-text)", title: "Customers overview", heroTitle: `${customers.length} total · ${customers.filter((c) => c.status === "Active").length} active`, heroNote: `${stats.customerPct}% active rate`, isMoney: false, chartHint: "Customers added per month", distTitle: "By status" },
+          revenue: { icon: DollarSign, accent: "bg-(--crm-st-process-bg) text-(--crm-st-process-text)", title: "Closed revenue", heroTitle: `${formatRupiahShort(doneInvoiceValue)} earned`, heroNote: `${invoices.filter((i) => i.status === "Done").length} paid of ${invoices.length} invoices`, isMoney: true, chartHint: "Invoices issued per month · committed vs won", distTitle: "By invoice status" },
+          quotes: { icon: ScrollText, accent: "bg-(--crm-st-draft-bg) text-(--crm-st-draft-text)", title: "Open quotes", heroTitle: `${formatRupiahShort(openQuoteValue)} open`, heroNote: `${quotes.filter((q) => q.status === "Active" || q.status === "Process").length} of ${quotes.length} quotes handled`, isMoney: true, chartHint: "Quotes issued per month · committed vs won", distTitle: "By quote status" },
+          products: { icon: Package, accent: "bg-(--crm-st-active-bg) text-(--crm-st-active-text)", title: "Products", heroTitle: `${products.length} products`, heroNote: `${products.filter((p) => p.promo).length} on promo · ${formatRupiahShort(products.reduce((sum, p) => sum + p.price, 0))} catalog`, isMoney: false, chartHint: "Products added per month", distTitle: "By promo" },
+        }[statsDetail];
+        const rows = statsDetail === "customers" ? statsCustomers.byMonth : statsDetail === "revenue" ? statsRevenue.byMonth : statsDetail === "quotes" ? statsQuotes.byMonth : statsProducts.byMonth;
+        const dist = statsDetail === "customers" ? statsCustomers.byStatus : statsDetail === "revenue" ? statsRevenue.byStatus : statsDetail === "quotes" ? statsQuotes.byStatus : statsProducts.distribution;
+        const maxVal = Math.max(1, ...rows.map((r) => (config.isMoney ? r.won + r.committed : r.count)));
+        const distMax = Math.max(1, ...dist.map((d) => d.count));
+        const Icon = config.icon;
+        return (
+          <RightDrawer onClose={() => setStatsDetail(null)} eyebrow="Dashboard details" title={config.title} widthClass="sm:w-[680px] lg:w-[760px]">
+            <div className="flex items-center gap-3 rounded-xl border border-(--crm-border) bg-(--crm-surface) p-4">
+              <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${config.accent}`}><Icon size={18} /></div>
+              <div>
+                <p className="text-sm font-semibold">{config.heroTitle}</p>
+                <p className="mt-0.5 text-[11px] text-(--crm-muted)">{config.heroNote}</p>
+              </div>
+            </div>
+
+            <p className="mt-6 text-xs font-semibold tracking-[-.02em]">Growth · last 6 months</p>
+            <p className="mt-0.5 text-[11px] text-(--crm-muted)">{config.chartHint}</p>
+            <div className="mt-3 flex h-[120px] items-end gap-3 border-b border-l border-(--crm-border) px-3 pt-3 sm:gap-5 sm:px-4">
+              {rows.map((row) => {
+                const wonH = config.isMoney ? Math.round((row.won / maxVal) * 100) : Math.round((row.count / maxVal) * 100);
+                const committedH = config.isMoney ? Math.round((row.committed / maxVal) * 100) : 0;
+                return (
+                  <div key={row.key} className="relative flex h-full w-full flex-1 flex-col items-center justify-end gap-1.5">
+                    <div className="flex w-full flex-1 flex-col justify-end gap-0.5">
+                      {config.isMoney ? (
+                        <>
+                          <div className={`w-full rounded-t-md transition-all ${row.won > 0 ? "bg-(--crm-accent)" : "bg-(--crm-surface)"}`} style={{ height: `${wonH}%` }} title={formatRupiahShort(row.won)} />
+                          <div className={`w-full rounded-b-md transition-all ${row.committed > 0 ? "bg-(--crm-chart-committed)" : "bg-(--crm-surface)"}`} style={{ height: `${committedH}%` }} title={formatRupiahShort(row.committed)} />
+                        </>
+                      ) : (
+                        <div className={`w-full rounded-md transition-all ${row.count > 0 ? "bg-(--crm-accent)" : "bg-(--crm-surface)"}`} style={{ height: `${wonH}%` }} title={`${row.count}`} />
+                      )}
+                    </div>
+                    <span className="text-[10px] text-(--crm-muted)">{row.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+            {config.isMoney && <div className="mt-2 flex items-center gap-4 text-[10px] text-(--crm-muted)"><span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm bg-(--crm-chart-committed)" />Committed</span><span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm bg-(--crm-accent)" />Won</span></div>}
+
+            <p className="mt-6 text-xs font-semibold tracking-[-.02em]">{config.distTitle}</p>
+            <div className="mt-3 space-y-3">
+              {dist.map((d) => (
+                <div key={d.label}>
+                  <div className="flex items-baseline justify-between text-xs">
+                    <span className="font-semibold text-(--crm-fg)">{d.label}</span>
+                    <span className="font-mono text-(--crm-secondary)">{config.isMoney ? formatRupiahShort(d.value) : `${d.count}`}</span>
+                  </div>
+                  <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-(--crm-surface)">
+                    <div className="h-full rounded-full bg-(--crm-brand)" style={{ width: `${Math.round((d.count / distMax) * 100)}%` }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {statsDetail === "customers" && (
+              <div className="mt-6">
+                <p className="text-xs font-semibold tracking-[-.02em]">Latest customers</p>
+                <div className="mt-1 divide-y divide-(--crm-border-soft)">
+                  {statsCustomers.latest.map((c) => (
+                    <button key={c.id} onClick={() => { setStatsDetail(null); setDetail(c); }} className="flex w-full items-center gap-3 py-3 text-left">
+                      <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${avatarTone[c.status] ?? "bg-(--crm-avatar-bg) text-(--crm-avatar-text)"}`}>{initials(c.name)}</div>
+                      <div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{c.name}</p><p className="mt-0.5 truncate text-[11px] text-(--crm-muted)">{c.businessName || c.email}</p></div>
+                      <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${stageTone[c.status] ?? "bg-(--crm-st-draft-bg) text-(--crm-st-draft-text)"}`}>{c.status}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+            {statsDetail === "revenue" && (
+              <div className="mt-6">
+                <p className="text-xs font-semibold tracking-[-.02em]">Latest paid invoices</p>
+                <div className="mt-1 divide-y divide-(--crm-border-soft)">
+                  {statsRevenue.latest.map((inv) => {
+                    const cust = customerById.get(inv.customerId);
+                    const total = computeTotals(inv.items, inv.discount, inv.tax).total;
+                    return (
+                      <button key={inv.id} onClick={() => { setStatsDetail(null); setInvoiceDetail(inv); }} className="flex w-full items-center gap-3 py-3 text-left">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-(--crm-surface) text-(--crm-secondary)"><FileText size={14} /></div>
+                        <div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{inv.number}</p><p className="mt-0.5 truncate text-[11px] text-(--crm-muted)">{cust?.name ?? "—"} · {formatDate(inv.dueDate)}</p></div>
+                        <span className="shrink-0 font-mono text-xs font-semibold">{formatRupiahShort(total)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {statsDetail === "quotes" && (
+              <div className="mt-6">
+                <p className="text-xs font-semibold tracking-[-.02em]">Open quotes</p>
+                <div className="mt-1 divide-y divide-(--crm-border-soft)">
+                  {statsQuotes.latest.map((q) => {
+                    const cust = customerById.get(q.customerId);
+                    const total = computeTotals(q.items, q.discount, q.tax).total;
+                    return (
+                      <button key={q.id} onClick={() => { setStatsDetail(null); setQuoteDetail(q); }} className="flex w-full items-center gap-3 py-3 text-left">
+                        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-(--crm-surface) text-(--crm-secondary)"><ScrollText size={14} /></div>
+                        <div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{q.number}</p><p className="mt-0.5 truncate text-[11px] text-(--crm-muted)">{cust?.name ?? "—"} · valid until {formatDate(q.validUntil)}</p></div>
+                        <span className="shrink-0 font-mono text-xs font-semibold">{formatRupiahShort(total)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+            {statsDetail === "products" && (
+              <div className="mt-6">
+                <p className="text-xs font-semibold tracking-[-.02em]">Latest products</p>
+                <div className="mt-1 divide-y divide-(--crm-border-soft)">
+                  {statsProducts.latest.map((p) => (
+                    <button key={p.id} onClick={() => { setStatsDetail(null); router.push("/products"); }} className="flex w-full items-center gap-3 py-3 text-left">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-(--crm-surface) text-(--crm-secondary)"><Package size={14} /></div>
+                      <div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold">{p.name}</p><p className="mt-0.5 truncate text-[11px] text-(--crm-muted)">{p.detail || "—"}</p></div>
+                      <span className="shrink-0 font-mono text-xs font-semibold">{formatRupiahShort(p.price)}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </RightDrawer>
         );
       })()}
