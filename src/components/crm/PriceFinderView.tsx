@@ -315,8 +315,8 @@ export function PriceFinderView({ onSaved }: { onSaved?: () => void }) {
                 <Field label="Domain name" icon={Globe}><input value={saveForm.name} onChange={(event) => setSaveForm({ ...saveForm, name: event.target.value })} className={inputCls} /></Field>
                 <Field label="Owner / Customer *" icon={Building2}><CustomerSearch customers={customers} value={saveForm.customerId} onChange={(customerId) => setSaveForm({ ...saveForm, customerId })} /></Field>
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Harga modal (Rp)" icon={Tag}><NumberInput value={saveForm.price} onChange={(v) => setSaveForm({ ...saveForm, price: v })} min={0} placeholder="0" className={inputCls} /></Field>
-                  <Field label="Harga jual (Rp)" icon={Tag}><NumberInput value={saveForm.sellPrice} onChange={(v) => setSaveForm({ ...saveForm, sellPrice: v })} min={0} placeholder="0" className={inputCls} /></Field>
+                  <Field label="Cost price (Rp)" icon={Tag}><NumberInput value={saveForm.price} onChange={(v) => setSaveForm({ ...saveForm, price: v })} min={0} placeholder="0" className={inputCls} /></Field>
+                  <Field label="Sell price (Rp)" icon={Tag}><NumberInput value={saveForm.sellPrice} onChange={(v) => setSaveForm({ ...saveForm, sellPrice: v })} min={0} placeholder="0" className={inputCls} /></Field>
                 </div>
                 <Field label="Provider" icon={Building2}><input value={saveForm.provider} onChange={(event) => setSaveForm({ ...saveForm, provider: event.target.value })} className={inputCls} /></Field>
                 <div className="grid gap-3 sm:grid-cols-2">
@@ -326,7 +326,7 @@ export function PriceFinderView({ onSaved }: { onSaved?: () => void }) {
                 {saveError && <p className="rounded-lg border border-(--crm-danger-border) bg-(--crm-danger-bg) px-3 py-2 text-xs font-medium text-(--crm-danger)">{saveError}</p>}
                 {saveForm.price > 0 && saveForm.sellPrice > 0 && (
                   <p className={`rounded-lg px-3 py-2 text-xs font-semibold ${saveForm.sellPrice >= saveForm.price ? "bg-(--crm-st-done-bg) text-(--crm-st-done-text)" : "bg-(--crm-st-cancel-bg) text-(--crm-st-cancel-text)"}`}>
-                    Margin: {formatRupiah(saveForm.sellPrice - saveForm.price)} ({saveForm.price > 0 ? Math.round(((saveForm.sellPrice - saveForm.price) / saveForm.price) * 100) : 0}%)
+                    Profit: {formatRupiah(saveForm.sellPrice - saveForm.price)} ({saveForm.price > 0 ? Math.round(((saveForm.sellPrice - saveForm.price) / saveForm.price) * 100) : 0}%)
                   </p>
                 )}
               </div>

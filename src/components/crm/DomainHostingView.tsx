@@ -63,6 +63,7 @@ export function DomainHostingView() {
   const [editing, setEditing] = useState<WebAsset | null>(null);
   const [form, setForm] = useState(emptyForm);
   const [detail, setDetail] = useState<WebAsset | null>(null);
+  const [costDetail, setCostDetail] = useState<WebAsset | null>(null);
   const [confirmDelete, setConfirmDelete] = useState<WebAsset | null>(null);
   const [toast, setToast] = useState("");
 
@@ -186,9 +187,11 @@ export function DomainHostingView() {
                     <td className="px-4 py-4 text-xs text-(--crm-muted)">{asset.provider || "—"}</td>
                     <td className="px-4 py-4 text-xs text-(--crm-muted)">{asset.startDate ? formatDate(asset.startDate) : "—"} → {asset.expiryDate ? formatDate(asset.expiryDate) : "—"}</td>
                     <td className="px-4 py-4">
-                      <p className="text-sm font-semibold">{formatRupiah(sell)}</p>
-                      {asset.price > 0 && <p className="text-[10px] text-(--crm-muted)">Modal {formatRupiah(asset.price)}</p>}
-                      {margin !== 0 && <p className={`text-[10px] font-semibold ${margin > 0 ? "text-emerald-600" : "text-(--crm-danger)"}`}>{margin > 0 ? "Laba" : "Rugi"} {formatRupiah(margin)}</p>}
+                      <button onClick={(event) => { event.stopPropagation(); setCostDetail(asset); }} title="View cost & profit" className="group block cursor-pointer text-left">
+                        <p className="text-sm font-semibold transition-colors group-hover:text-(--crm-brand) group-hover:underline">{formatRupiah(sell)}</p>
+                        {asset.price > 0 && <p className="text-[10px] text-(--crm-muted)">Cost {formatRupiah(asset.price)}</p>}
+                        {margin !== 0 && <p className={`text-[10px] font-semibold ${margin > 0 ? "text-emerald-600" : "text-(--crm-danger)"}`}>{margin > 0 ? "Profit" : "Loss"} {formatRupiah(margin)}</p>}
+                      </button>
                     </td>
                     <td className="px-6 py-4"><div className="flex justify-end gap-1.5"><button onClick={(event) => { event.stopPropagation(); openEdit(asset); }} className="rounded-lg border border-(--crm-border-input) p-2 text-(--crm-brand) hover:bg-(--crm-hover)" aria-label="Edit"><Pencil size={14} /></button><button onClick={(event) => { event.stopPropagation(); setConfirmDelete(asset); }} className="rounded-lg border border-(--crm-danger-border) p-2 text-(--crm-danger) hover:bg-(--crm-danger-bg)" aria-label="Delete"><Trash2 size={14} /></button></div></td>
                   </tr>
@@ -229,8 +232,8 @@ export function DomainHostingView() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Provider" icon={Building2}><input value={form.provider} onChange={(event) => setForm({ ...form, provider: event.target.value })} placeholder="e.g. Niagahoster, Domainesia" className={inputCls} /></Field>
                 <div />
-                <Field label="Harga modal (Rp)" icon={Server}><NumberInput value={form.price} onChange={(v) => setForm({ ...form, price: v })} min={0} placeholder="0" className={inputCls} /></Field>
-                <Field label="Harga jual (Rp)" icon={Server}><NumberInput value={form.sellPrice} onChange={(v) => setForm({ ...form, sellPrice: v })} min={0} placeholder="0" className={inputCls} /></Field>
+                <Field label="Cost price (Rp)" icon={Server}><NumberInput value={form.price} onChange={(v) => setForm({ ...form, price: v })} min={0} placeholder="0" className={inputCls} /></Field>
+                <Field label="Sell price (Rp)" icon={Server}><NumberInput value={form.sellPrice} onChange={(v) => setForm({ ...form, sellPrice: v })} min={0} placeholder="0" className={inputCls} /></Field>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Active from" icon={CalendarDays}><input type="date" value={form.startDate} onChange={(event) => setForm({ ...form, startDate: event.target.value })} className={inputCls} /></Field>
@@ -254,7 +257,7 @@ export function DomainHostingView() {
               <InfoRow icon={UserRound} label="Owner Cust ID" value={customerById.get(detail.customerId)?.code || "—"} />
               <InfoRow icon={Mail} label="Owner email" value={customerById.get(detail.customerId)?.email || "—"} />
               <InfoRow icon={Building2} label="Provider" value={detail.provider || "—"} />
-              <InfoRow icon={Server} label="Harga jual" value={formatRupiah(detail.sellPrice > 0 ? detail.sellPrice : detail.price)} />
+              <InfoRow icon={Server} label="Sell price" value={formatRupiah(detail.sellPrice > 0 ? detail.sellPrice : detail.price)} />
               <InfoRow icon={CalendarDays} label="Active from" value={detail.startDate ? formatDate(detail.startDate) : "—"} />
               <InfoRow icon={CalendarDays} label="Expires on" value={detail.expiryDate ? formatDate(detail.expiryDate) : "—"} />
             </div>
@@ -262,6 +265,45 @@ export function DomainHostingView() {
             <p className="mt-4 text-[11px] text-(--crm-faint)">Registered {formatDate(detail.createdAt)}</p>
         </RightDrawer>
       )}
+
+      {costDetail && (() => {
+        const info = typeTone[costDetail.type];
+        const Icon = info.icon;
+        const sell = costDetail.sellPrice > 0 ? costDetail.sellPrice : costDetail.price;
+        const profit = costDetail.sellPrice > 0 && costDetail.price > 0 ? costDetail.sellPrice - costDetail.price : 0;
+        const profitPct = costDetail.price > 0 ? Math.round((profit / costDetail.price) * 100) : 0;
+        return (
+          <RightDrawer onClose={() => setCostDetail(null)} eyebrow={`${costDetail.type === "domain" ? "Domain" : "Hosting"} cost & profit`} title={costDetail.name} widthClass="sm:w-[680px] lg:w-[760px]">
+            <div className="flex items-center gap-4">
+              <div className={`flex h-12 w-12 items-center justify-center rounded-2xl ${info.color}`}><Icon size={22} /></div>
+              <div>
+                <p className="text-sm text-(--crm-secondary) capitalize">{costDetail.type} · {costDetail.provider || "No provider"} · {customerById.get(costDetail.customerId)?.name ?? "No owner"}</p>
+                <span className={`mt-1 inline-block rounded-full px-2.5 py-0.5 text-[10px] font-semibold ${(expiryInfo(costDetail.expiryDate) ?? { tone: "bg-(--crm-st-draft-bg) text-(--crm-st-draft-text)" }).tone}`}>{expiryInfo(costDetail.expiryDate)?.label ?? "No expiry"}</span>
+              </div>
+            </div>
+
+            <div className="mt-5 grid gap-3 sm:grid-cols-3">
+              <div className="rounded-xl border border-(--crm-border) bg-(--crm-surface) p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[.12em] text-(--crm-label)">Cost price</p>
+                <p className="mt-1.5 text-lg font-bold tracking-[-.03em]">{formatRupiah(costDetail.price)}</p>
+                <p className="mt-0.5 text-[10px] text-(--crm-muted)">What you pay yearly</p>
+              </div>
+              <div className="rounded-xl border border-(--crm-border) bg-(--crm-surface) p-4">
+                <p className="text-[10px] font-semibold uppercase tracking-[.12em] text-(--crm-label)">Sell price</p>
+                <p className="mt-1.5 text-lg font-bold tracking-[-.03em]">{formatRupiah(sell)}</p>
+                <p className="mt-0.5 text-[10px] text-(--crm-muted)">What the customer pays</p>
+              </div>
+              <div className={`rounded-xl border p-4 ${profit >= 0 ? "border-(--crm-border) bg-(--crm-st-done-bg)" : "border-(--crm-danger-border) bg-(--crm-danger-bg)"}`}>
+                <p className={`text-[10px] font-semibold uppercase tracking-[.12em] ${profit >= 0 ? "text-(--crm-st-done-text)" : "text-(--crm-danger)"}`}>{profit >= 0 ? "Profit" : "Loss"}</p>
+                <p className="mt-1.5 text-lg font-bold tracking-[-.03em]">{formatRupiah(Math.abs(profit))}</p>
+                <p className={`mt-0.5 text-[10px] font-semibold ${profit >= 0 ? "text-(--crm-st-done-text)" : "text-(--crm-danger)"}`}>{profit >= 0 ? "+" : ""}{profitPct}% of cost</p>
+              </div>
+            </div>
+
+            <p className="mt-4 rounded-xl bg-(--crm-soft) px-3 py-2.5 text-[11px] leading-5 text-(--crm-secondary)">Cost price and profit are internal figures — they never appear in the customer-facing detail view or on quotes/invoices.</p>
+          </RightDrawer>
+        );
+      })()}
 
       {confirmDelete && (
         <ConfirmModal
