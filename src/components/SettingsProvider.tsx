@@ -6,11 +6,11 @@ import { DEFAULT_SETTINGS, FONT_SIZES, THEMES, THEME_VAR_KEYS } from "@/lib/sett
 import type { FontSizeKey, SiteSettings, ThemeKey } from "@/lib/settings";
 
 /** Patch payload. `geminiApiKey` is send-only — the stored key never leaves the server. */
-export type SettingsPatch = Partial<SiteSettings> & { geminiApiKey?: string; merge?: boolean; removeKeyIndex?: number };
+export type SettingsPatch = Partial<SiteSettings> & { geminiApiKey?: string; merge?: boolean; removeKeyIndex?: number; porkbunApiKey?: string; porkbunSecretApiKey?: string; clearPorkbunKeys?: boolean };
 
 type SettingsContextValue = {
   settings: SiteSettings;
-  updateSettings: (patch: SettingsPatch) => Promise<{ hasGeminiKey?: boolean; geminiKeyCount?: number }>;
+  updateSettings: (patch: SettingsPatch) => Promise<{ hasGeminiKey?: boolean; geminiKeyCount?: number; hasPorkbunKey?: boolean }>;
 };
 
 const SettingsContext = createContext<SettingsContextValue | null>(null);
@@ -35,7 +35,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
     let cancelled = false;
     fetch("/api/settings")
       .then((r) => r.json())
-      .then((data: { siteName?: string; theme?: ThemeKey; fontSize?: FontSizeKey; hasGeminiKey?: boolean; geminiKeyCount?: number; geminiKeyTails?: string[] }) => {
+      .then((data: { siteName?: string; theme?: ThemeKey; fontSize?: FontSizeKey; hasGeminiKey?: boolean; geminiKeyCount?: number; geminiKeyTails?: string[]; hasPorkbunKey?: boolean; porkbunKeyTail?: string; porkbunSecretKeyTail?: string }) => {
         if (cancelled) return;
         setSettings({
           siteName: data.siteName && data.siteName.trim() ? data.siteName.trim() : DEFAULT_SETTINGS.siteName,
@@ -44,6 +44,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
           hasGeminiKey: !!data.hasGeminiKey,
           geminiKeyCount: typeof data.geminiKeyCount === "number" ? data.geminiKeyCount : 0,
           geminiKeyTails: Array.isArray(data.geminiKeyTails) ? data.geminiKeyTails : [],
+          hasPorkbunKey: !!data.hasPorkbunKey,
+          porkbunKeyTail: typeof data.porkbunKeyTail === "string" ? data.porkbunKeyTail : "",
+          porkbunSecretKeyTail: typeof data.porkbunSecretKeyTail === "string" ? data.porkbunSecretKeyTail : "",
         });
       })
       .catch(() => {
@@ -67,7 +70,7 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(patch),
     });
-    const data = (await res.json()) as { siteName?: string; theme?: ThemeKey; fontSize?: FontSizeKey; hasGeminiKey?: boolean; geminiKeyCount?: number; geminiKeyTails?: string[]; error?: string };
+    const data = (await res.json()) as { siteName?: string; theme?: ThemeKey; fontSize?: FontSizeKey; hasGeminiKey?: boolean; geminiKeyCount?: number; geminiKeyTails?: string[]; hasPorkbunKey?: boolean; porkbunKeyTail?: string; porkbunSecretKeyTail?: string; error?: string };
     if (!res.ok) throw new Error(data.error ?? "Something went wrong while saving settings.");
     setSettings((prev) => ({
       siteName: data.siteName ?? prev.siteName,
@@ -76,6 +79,9 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
       hasGeminiKey: typeof data.hasGeminiKey === "boolean" ? data.hasGeminiKey : prev.hasGeminiKey,
       geminiKeyCount: typeof data.geminiKeyCount === "number" ? data.geminiKeyCount : prev.geminiKeyCount,
       geminiKeyTails: Array.isArray(data.geminiKeyTails) ? data.geminiKeyTails : prev.geminiKeyTails,
+      hasPorkbunKey: typeof data.hasPorkbunKey === "boolean" ? data.hasPorkbunKey : prev.hasPorkbunKey,
+      porkbunKeyTail: typeof data.porkbunKeyTail === "string" ? data.porkbunKeyTail : prev.porkbunKeyTail,
+      porkbunSecretKeyTail: typeof data.porkbunSecretKeyTail === "string" ? data.porkbunSecretKeyTail : prev.porkbunSecretKeyTail,
     }));
     return data;
   }, []);

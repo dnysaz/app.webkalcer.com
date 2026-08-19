@@ -11,6 +11,7 @@ import {
   Plus,
   Search,
   Server,
+  Tag,
   Trash2,
   UserRound,
 } from "lucide-react";
@@ -20,6 +21,7 @@ import { RightDrawer } from "@/components/crm/RightDrawer";
 import { CustomerSearch } from "@/components/crm/CustomerSearch";
 import { NumberInput } from "@/components/crm/NumberInput";
 import { ConfirmModal } from "@/components/crm/ConfirmModal";
+import { PriceFinderView } from "@/components/crm/PriceFinderView";
 import type { WebAsset, WebAssetType } from "@/lib/crm";
 import { formatDate, formatRupiah, uid, WEB_ASSET_TYPES } from "@/lib/crm";
 
@@ -53,6 +55,7 @@ const emptyForm = {
 
 export function DomainHostingView() {
   const { customers, webAssets, addWebAsset, updateWebAsset, deleteWebAsset } = useCrm();
+  const [tab, setTab] = useState<"assets" | "prices">("assets");
   const [query, setQuery] = useState("");
   const [typeFilter, setTypeFilter] = useState<"All" | WebAssetType>("All");
   const [showForm, setShowForm] = useState(false);
@@ -141,10 +144,16 @@ export function DomainHostingView() {
           <p className="mt-1 text-sm text-(--crm-secondary)">Track purchased domains and hosting plans, their owner, and active period.</p>
         </div>
         <div className="flex items-center gap-2">
-          <button onClick={openAdd} className="flex items-center gap-2 rounded-xl bg-(--crm-primary) px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-(--crm-dark) hover:shadow-md"><Plus size={16} />Add asset</button>
+          {tab === "assets" && <button onClick={openAdd} className="flex items-center gap-2 rounded-xl bg-(--crm-primary) px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-(--crm-dark) hover:shadow-md"><Plus size={16} />Add asset</button>}
         </div>
       </div>
 
+      <div className="crm-rise mt-6 inline-flex rounded-xl bg-(--crm-hover) p-1">
+        <button onClick={() => setTab("assets")} className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${tab === "assets" ? "bg-(--crm-surface) text-(--crm-text) shadow-sm" : "text-(--crm-muted)"}`}><Globe size={15} />Assets</button>
+        <button onClick={() => setTab("prices")} className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${tab === "prices" ? "bg-(--crm-surface) text-(--crm-text) shadow-sm" : "text-(--crm-muted)"}`}><Tag size={15} />Price Finder</button>
+      </div>
+
+      {tab === "prices" ? <div className="mt-6"><PriceFinderView /></div> : (
       <div className="crm-rise mt-6 rounded-2xl border border-(--crm-border) bg-(--crm-panel)">
         <div className="flex flex-col gap-4 border-b border-(--crm-border) p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
           <div><h3 className="font-semibold tracking-[-.02em]">Asset list</h3><p className="mt-1 text-xs text-(--crm-muted)">{filtered.length} of {webAssets.length} assets</p></div>
@@ -198,6 +207,7 @@ export function DomainHostingView() {
 
         {filtered.length === 0 && <div className="p-12 text-center"><Search size={24} className="mx-auto text-(--crm-faint)" /><p className="mt-3 text-sm font-semibold">No domains or hosting found</p><p className="mt-1 text-xs text-(--crm-muted)">Add your first purchased asset to start tracking it.</p></div>}
       </div>
+      )}
 
       {showForm && (
         <RightDrawer onClose={() => setShowForm(false)} eyebrow={`${editing ? "Edit" : "Add"} asset`} title={editing ? `Edit ${editing.name}` : "New domain / hosting"} widthClass="sm:w-[680px] lg:w-[760px]"

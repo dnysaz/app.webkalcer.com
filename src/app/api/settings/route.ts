@@ -8,7 +8,7 @@ import { DEFAULT_SETTINGS, FONT_SIZES, SETTINGS_ROW_ID, THEMES } from "@/lib/set
 import type { FontSizeKey, ThemeKey } from "@/lib/settings";
 import { MAX_GEMINI_KEYS, parseGeminiKeys } from "@/lib/gemini";
 
-type SettingsRow = { site_name: string; theme: string; font_size: string; gemini_api_key: string };
+type SettingsRow = { site_name: string; theme: string; font_size: string; gemini_api_key: string; porkbun_api_key: string; porkbun_secret_api_key: string };
 
 /** Returns the last 5 characters of each key — enough to identify it, never enough to use it. */
 function keyTails(keys: string[]): string[] {
@@ -17,9 +17,12 @@ function keyTails(keys: string[]): string[] {
 
 export async function GET() {
   try {
-    const rows = await query<SettingsRow>`SELECT site_name, theme, font_size, gemini_api_key FROM settings WHERE id = ${SETTINGS_ROW_ID} LIMIT 1`;
+    const rows = await query<SettingsRow>`SELECT site_name, theme, font_size, gemini_api_key, porkbun_api_key, porkbun_secret_api_key FROM settings WHERE id = ${SETTINGS_ROW_ID} LIMIT 1`;
     const row = rows[0];
     const keys = parseGeminiKeys(row?.gemini_api_key ?? "");
+    const porkbunApiKey = (row?.porkbun_api_key ?? "").trim();
+    const porkbunSecretKey = (row?.porkbun_secret_api_key ?? "").trim();
+    const hasPorkbun = porkbunApiKey.length > 0 && porkbunSecretKey.length > 0;
     return NextResponse.json({
       siteName: row?.site_name ?? DEFAULT_SETTINGS.siteName,
       theme: row?.theme && THEMES[row.theme as ThemeKey] ? (row.theme as ThemeKey) : DEFAULT_SETTINGS.theme,
@@ -28,6 +31,9 @@ export async function GET() {
       hasGeminiKey: keys.length > 0,
       geminiKeyCount: keys.length,
       geminiKeyTails: keyTails(keys),
+      hasPorkbunKey: hasPorkbun,
+      porkbunKeyTail: hasPorkbun ? porkbunApiKey.slice(-5) : "",
+      porkbunSecretKeyTail: hasPorkbun ? porkbunSecretKey.slice(-5) : "",
     });
   } catch (error) {
     // Table may not exist yet on a brand-new DB (schema is created by
@@ -45,23 +51,37 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   try {
-    const body = (await request.json()) as { siteName?: string; theme?: string; fontSize?: string; geminiApiKey?: string; merge?: boolean; removeKeyIndex?: number };
+    const body = (await request.json()) as { siteName?: string; theme?: string; fontSize?: string; geminiApiKey?: string; merge?: boolean; removeKeyIndex?: number; porkbunApiKey?: string; porkbunSecretApiKey?: string; clearPorkbunKeys?: boolean };
     const siteName = typeof body.siteName === "string" ? body.siteName.trim().slice(0, 80) : undefined;
     const theme = body.theme && THEMES[body.theme as ThemeKey] ? (body.theme as ThemeKey) : undefined;
     const fontSize = body.fontSize && FONT_SIZES[body.fontSize as FontSizeKey] ? (body.fontSize as FontSizeKey) : undefined;
     const geminiApiKey = typeof body.geminiApiKey === "string" ? body.geminiApiKey.trim() : undefined;
     const merge = body.merge === true;
     const removeKeyIndex = typeof body.removeKeyIndex === "number" ? body.removeKeyIndex : undefined;
+    const porkbunApiKey = typeof body.porkbunApiKey === "string" ? body.porkbunApiKey.trim() : undefined;
+    const porkbunSecretApiKey = typeof body.porkbunSecretApiKey === "string" ? body.porkbunSecretApiKey.trim() : undefined;
+    const clearPorkbunKeys = body.clearPorkbunKeys === true;
 
     if (siteName !== undefined && !siteName) {
       return NextResponse.json({ error: "Site name cannot be empty." }, { status: 400 });
     }
-    if (siteName === undefined && theme === undefined && fontSize === undefined && geminiApiKey === undefined && removeKeyIndex === undefined) {
+    if (
+      siteName === undefined && theme === undefined && fontSize === undefined && geminiApiKey === undefined &&
+      removeKeyIndex === undefined && porkbunApiKey === undefined && porkbunSecretApiKey === undefined && !clearPorkbunKeys
+    ) {
       return NextResponse.json({ error: "Nothing to update." }, { status: 400 });
     }
 
+    // Porkbun keys must be saved as a pair.
+    if ((porkbunApiKey !== undefined && porkbunSecretApiKey === undefined) || (porkbunApiKey === undefined && porkbunSecretApiKey !== undefined)) {
+      return NextResponse.json({ error: "Enter both Porkbun API key and secret key." }, { status: 400 });
+    }
+    if ((porkbunApiKey !== undefined && !porkbunApiKey) || (porkbunSecretApiKey !== undefined && !porkbunSecretApiKey)) {
+      return NextResponse.json({ error: "Porkbun API keys cannot be empty." }, { status: 400 });
+    }
+
     await setupDatabase();
-    const rows = await query<SettingsRow>`SELECT site_name, theme, font_size, gemini_api_key FROM settings WHERE id = ${SETTINGS_ROW_ID} LIMIT 1`;
+    const rows = await query<SettingsRow>`SELECT site_name, theme, font_size, gemini_api_key, porkbun_api_key, porkbun_secret_api_key FROM settings WHERE id = ${SETTINGS_ROW_ID} LIMIT 1`;
     const current = rows[0];
 
     let finalKeysValue: string | undefined = geminiApiKey;
@@ -94,15 +114,20 @@ export async function PATCH(request: Request) {
 
     const finalKeys = parseGeminiKeys(finalKeysValue ?? current?.gemini_api_key ?? "");
     const finalKeysStored = finalKeys.join("\n");
+    const finalPorkbunApiKey = clearPorkbunKeys ? "" : (porkbunApiKey ?? current?.porkbun_api_key ?? "");
+    const finalPorkbunSecretKey = clearPorkbunKeys ? "" : (porkbunSecretApiKey ?? current?.porkbun_secret_api_key ?? "");
+    const hasPorkbun = finalPorkbunApiKey.trim().length > 0 && finalPorkbunSecretKey.trim().length > 0;
     const sql = getSql();
     await sql`
-      INSERT INTO settings (id, site_name, theme, font_size, gemini_api_key, updated_at)
-      VALUES (${SETTINGS_ROW_ID}, ${siteName ?? current?.site_name ?? DEFAULT_SETTINGS.siteName}, ${theme ?? current?.theme ?? DEFAULT_SETTINGS.theme}, ${fontSize ?? current?.font_size ?? DEFAULT_SETTINGS.fontSize}, ${finalKeysStored}, now())
+      INSERT INTO settings (id, site_name, theme, font_size, gemini_api_key, porkbun_api_key, porkbun_secret_api_key, updated_at)
+      VALUES (${SETTINGS_ROW_ID}, ${siteName ?? current?.site_name ?? DEFAULT_SETTINGS.siteName}, ${theme ?? current?.theme ?? DEFAULT_SETTINGS.theme}, ${fontSize ?? current?.font_size ?? DEFAULT_SETTINGS.fontSize}, ${finalKeysStored}, ${finalPorkbunApiKey}, ${finalPorkbunSecretKey}, now())
       ON CONFLICT (id) DO UPDATE SET
         site_name = EXCLUDED.site_name,
         theme = EXCLUDED.theme,
         font_size = EXCLUDED.font_size,
         gemini_api_key = EXCLUDED.gemini_api_key,
+        porkbun_api_key = EXCLUDED.porkbun_api_key,
+        porkbun_secret_api_key = EXCLUDED.porkbun_secret_api_key,
         updated_at = now()`;
 
     return NextResponse.json({
@@ -112,6 +137,9 @@ export async function PATCH(request: Request) {
       hasGeminiKey: finalKeys.length > 0,
       geminiKeyCount: finalKeys.length,
       geminiKeyTails: keyTails(finalKeys),
+      hasPorkbunKey: hasPorkbun,
+      porkbunKeyTail: hasPorkbun ? finalPorkbunApiKey.trim().slice(-5) : "",
+      porkbunSecretKeyTail: hasPorkbun ? finalPorkbunSecretKey.trim().slice(-5) : "",
     });
   } catch (error) {
     console.error("Update settings failed:", error);

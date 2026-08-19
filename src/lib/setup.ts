@@ -148,6 +148,8 @@ async function runSetupDatabase() {
   await sql`ALTER TABLE settings ADD COLUMN IF NOT EXISTS seeded boolean NOT NULL DEFAULT false`;
   await sql`ALTER TABLE settings ADD COLUMN IF NOT EXISTS font_size text NOT NULL DEFAULT 'md'`;
   await sql`ALTER TABLE settings ADD COLUMN IF NOT EXISTS gemini_api_key text NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE settings ADD COLUMN IF NOT EXISTS porkbun_api_key text NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE settings ADD COLUMN IF NOT EXISTS porkbun_secret_api_key text NOT NULL DEFAULT ''`;
   await sql`INSERT INTO settings (id) VALUES ('site') ON CONFLICT (id) DO NOTHING`;
 
   await sql`CREATE TABLE IF NOT EXISTS contacts (

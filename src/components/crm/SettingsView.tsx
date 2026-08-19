@@ -27,6 +27,7 @@ export function SettingsView() {
         <div className="mx-auto mt-6 grid max-w-2xl gap-6">
           <WebsiteSection onToast={onToast} />
           <AiSection onToast={onToast} />
+          <PorkbunSection onToast={onToast} />
           <AccountSection onToast={onToast} />
           <PasswordSection onToast={onToast} />
         </div>
@@ -419,6 +420,130 @@ function AiSection({ onToast }: { onToast: (message: string) => void }) {
           <span className="font-mono text-(--crm-brand)">aistudio.google.com/apikey</span>.
           Keys are stored securely in the database, never sent to the browser.
           If a key fails or hits its quota, the next one is used automatically.
+        </p>
+      </div>
+    </SectionCard>
+  );
+}
+
+function PorkbunSection({ onToast }: { onToast: (message: string) => void }) {
+  const { settings, updateSettings } = useSettings();
+  const [apiKey, setApiKey] = useState("");
+  const [secretKey, setSecretKey] = useState("");
+  const [show, setShow] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  const configured = settings.hasPorkbunKey;
+
+  async function saveKeys() {
+    const pub = apiKey.trim();
+    const sec = secretKey.trim();
+    if (!pub || !sec) {
+      onToast("Enter both the API key and the secret key.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await updateSettings({ porkbunApiKey: pub, porkbunSecretApiKey: sec });
+      setApiKey("");
+      setSecretKey("");
+      onToast("Porkbun API keys saved.");
+    } catch (err) {
+      onToast(err instanceof Error ? err.message : "Failed to save keys.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function clearKeys() {
+    setBusy(true);
+    try {
+      await updateSettings({ clearPorkbunKeys: true });
+      onToast("Porkbun API keys removed.");
+    } catch (err) {
+      onToast(err instanceof Error ? err.message : "Failed to remove keys.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <SectionCard
+      icon={Globe}
+      title="Porkbun · API keys"
+      description="Keys used to check domain availability and prices on the Domain &amp; Hosting page. Get them at porkbun.com/account/api."
+    >
+      <div className="space-y-5">
+        {configured && (
+          <div className="space-y-1.5">
+            <p className="text-[10px] font-semibold uppercase tracking-[.12em] text-(--crm-label)">Saved in database</p>
+            <div className="flex items-center gap-2">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-(--crm-soft) text-[10px] font-bold text-(--crm-text)">PK</span>
+              <div className="flex h-10 flex-1 items-center gap-2.5 rounded-lg border border-(--crm-border) bg-(--crm-surface) px-3">
+                <span className="flex h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
+                <span className="flex-1 font-mono text-sm text-(--crm-secondary)">••••••••••••••••<span className="font-semibold text-(--crm-text)">{settings.porkbunKeyTail}</span></span>
+                <span className="rounded-md bg-(--crm-soft) px-1.5 py-0.5 text-[10px] font-semibold text-(--crm-mid)">API key …{settings.porkbunKeyTail}</span>
+              </div>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-(--crm-soft) text-[10px] font-bold text-(--crm-text)">SK</span>
+              <div className="flex h-10 flex-1 items-center gap-2.5 rounded-lg border border-(--crm-border) bg-(--crm-surface) px-3">
+                <span className="flex h-2 w-2 shrink-0 rounded-full bg-emerald-400" />
+                <span className="flex-1 font-mono text-sm text-(--crm-secondary)">••••••••••••••••<span className="font-semibold text-(--crm-text)">{settings.porkbunSecretKeyTail}</span></span>
+                <span className="rounded-md bg-(--crm-soft) px-1.5 py-0.5 text-[10px] font-semibold text-(--crm-mid)">Secret …{settings.porkbunSecretKeyTail}</span>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label className="block text-[10px] font-semibold uppercase tracking-[.12em] text-(--crm-label)">API key (pk1_…)</label>
+            <div className="relative mt-1.5">
+              <input
+                type={show ? "text" : "password"}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="Paste public API key"
+                autoComplete="off"
+                spellCheck={false}
+                className="h-10 w-full rounded-lg border border-(--crm-border-input) bg-(--crm-surface) pr-11 pl-3 font-mono text-sm outline-none transition-colors placeholder:text-(--crm-placeholder) focus:border-(--crm-mid) focus:ring-2 focus:ring-(--crm-soft)"
+              />
+              <button type="button" onClick={() => setShow((prev) => !prev)} className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-(--crm-muted) transition-colors hover:bg-(--crm-hover) hover:text-(--crm-secondary)" aria-label={show ? "Hide keys" : "Show keys"} title={show ? "Hide keys" : "Show keys"}><EyeOff size={15} className={show ? "hidden" : ""} /><Eye size={15} className={show ? "" : "hidden"} /></button>
+            </div>
+          </div>
+          <div>
+            <label className="block text-[10px] font-semibold uppercase tracking-[.12em] text-(--crm-label)">Secret key (sk1_…)</label>
+            <div className="relative mt-1.5">
+              <input
+                type={show ? "text" : "password"}
+                value={secretKey}
+                onChange={(e) => setSecretKey(e.target.value)}
+                placeholder="Paste secret API key"
+                autoComplete="off"
+                spellCheck={false}
+                className="h-10 w-full rounded-lg border border-(--crm-border-input) bg-(--crm-surface) pr-11 pl-3 font-mono text-sm outline-none transition-colors placeholder:text-(--crm-placeholder) focus:border-(--crm-mid) focus:ring-2 focus:ring-(--crm-soft)"
+              />
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <button onClick={() => void saveKeys()} disabled={busy} className="flex items-center gap-1.5 rounded-lg bg-(--crm-primary) px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-(--crm-dark) disabled:cursor-not-allowed disabled:opacity-60">
+            <KeyRound size={14} />
+            {busy ? "Saving…" : configured ? "Update keys" : "Save keys"}
+          </button>
+          {configured && (
+            <button onClick={() => void clearKeys()} disabled={busy} className="flex items-center gap-1.5 rounded-lg border border-(--crm-danger-border) px-4 py-2 text-sm font-semibold text-(--crm-danger) transition-colors hover:bg-(--crm-danger-bg) disabled:cursor-not-allowed disabled:opacity-60">
+              <Trash2 size={14} />
+              Remove
+            </button>
+          )}
+        </div>
+
+        <p className="text-[11px] leading-5 text-(--crm-muted)">
+          Create keys at <span className="font-mono text-(--crm-brand)">porkbun.com/account/api</span>.
+          Keys are stored securely in the database, never sent to the browser.
         </p>
       </div>
     </SectionCard>

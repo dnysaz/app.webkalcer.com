@@ -135,6 +135,15 @@ export interface SiteSettings {
    * Used to identify which keys are saved without exposing the full key.
    */
   geminiKeyTails: string[];
+  /**
+   * Whether Porkbun API keys (public + secret) are stored server-side.
+   * The raw keys are never sent to the browser.
+   */
+  hasPorkbunKey: boolean;
+  /** Last 5 characters of the stored Porkbun public API key. */
+  porkbunKeyTail: string;
+  /** Last 5 characters of the stored Porkbun secret API key. */
+  porkbunSecretKeyTail: string;
 }
 
 export const DEFAULT_SETTINGS: SiteSettings = {
@@ -144,6 +153,9 @@ export const DEFAULT_SETTINGS: SiteSettings = {
   hasGeminiKey: false,
   geminiKeyCount: 0,
   geminiKeyTails: [],
+  hasPorkbunKey: false,
+  porkbunKeyTail: "",
+  porkbunSecretKeyTail: "",
 };
 
 export const SETTINGS_ROW_ID = "site";
