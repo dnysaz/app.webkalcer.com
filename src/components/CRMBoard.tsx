@@ -2,15 +2,18 @@
 
 import { useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import {
   Check,
   DollarSign,
   FileText,
+  Globe,
+  Mail,
   MoreHorizontal,
   Package,
   ScrollText,
   Search,
-  UserRound,
+  Server,
   Users,
 } from "lucide-react";
 import { CrmShell } from "@/components/CrmShell";
@@ -23,8 +26,8 @@ import { ShareButton } from "@/components/crm/ShareLinkModal";
 import { ConfirmModal } from "@/components/crm/ConfirmModal";
 import { usePaymentSettings } from "@/components/crm/usePaymentSettings";
 import { CustomerDetailBody, InvoiceDetailBody, QuoteDetailBody } from "@/components/crm/DetailBodies";
-import type { Customer, Invoice, Quote } from "@/lib/crm";
-import { computeTotals, formatDate, formatDateLong, formatRupiahShort, nextNumber, uid } from "@/lib/crm";
+import type { Customer, Invoice, Quote, WebAsset } from "@/lib/crm";
+import { computeTotals, formatDate, formatDateLong, formatPhones, formatRupiah, formatRupiahShort, nextNumber, uid } from "@/lib/crm";
 import { buildCustomerPdf, buildInvoicePdf, buildQuotePdf } from "@/lib/pdf";
 
 const stageTone: Record<string, string> = {
@@ -67,16 +70,12 @@ function greeting(): string {
   return "Good night";
 }
 
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "just now";
-  if (mins < 60) return `${mins} min ago`;
-  const hrs = Math.floor(mins / 60);
-  if (hrs < 24) return `${hrs} hr ago`;
-  const days = Math.floor(hrs / 24);
-  if (days < 30) return `${days} days ago`;
-  return formatDate(iso);
+function daysUntil(iso: string): number {
+  const now = new Date();
+  now.setHours(0, 0, 0, 0);
+  const exp = new Date(iso);
+  exp.setHours(0, 0, 0, 0);
+  return Math.ceil((exp.getTime() - now.getTime()) / 86400000);
 }
 
 function StatCard({ label, value, badge, note, icon: Icon, accent }: { label: string; value: string; badge: string; note: string; icon: typeof DollarSign; accent: string }) {
@@ -94,7 +93,7 @@ function StatCard({ label, value, badge, note, icon: Icon, accent }: { label: st
 }
 
 export function CRMBoard() {
-  const { customers, invoices, quotes, products, deleteCustomer, deleteInvoice, deleteQuote, addInvoice, updateQuote } = useCrm();
+  const { customers, invoices, quotes, products, webAssets, deleteCustomer, deleteInvoice, deleteQuote, addInvoice, updateQuote } = useCrm();
   const { settings } = useSettings();
   const { session } = useAuth();
   const router = useRouter();
@@ -109,6 +108,7 @@ export function CRMBoard() {
   const [confirmDeleteInvoice, setConfirmDeleteInvoice] = useState<Invoice | null>(null);
   const [confirmDeleteQuote, setConfirmDeleteQuote] = useState<Quote | null>(null);
   const [confirmProcessQuote, setConfirmProcessQuote] = useState<Quote | null>(null);
+  const [expiringDetail, setExpiringDetail] = useState<WebAsset | null>(null);
   const [latestTab, setLatestTab] = useState<"customers" | "invoices" | "quotes">("customers");
 
   const customerById = useMemo(() => new Map(customers.map((c) => [c.id, c])), [customers]);
@@ -179,28 +179,23 @@ export function CRMBoard() {
     return { total, won };
   }, [chartSource, invoices, quotes]);
 
-  // ---- Activity feed from real latest records ----
-  const activities = useMemo(() => {
-    type Item = { key: string; icon: typeof Check; title: string; detail: string; time: string; color: string; date: number };
-    const items: Item[] = [];
-    for (const c of customers) {
-      items.push({ key: `c-${c.id}`, icon: UserRound, title: "New customer", detail: `${c.name} · ${c.businessName || c.email}`, time: timeAgo(c.createdAt), color: "bg-(--crm-st-done-bg) text-(--crm-st-done-text)", date: new Date(c.createdAt).getTime() });
-    }
-    for (const inv of invoices) {
-      const cust = customerById.get(inv.customerId);
-      const total = computeTotals(inv.items, inv.discount, inv.tax).total;
-      items.push({ key: `i-${inv.id}`, icon: FileText, title: `Invoice ${inv.number}`, detail: `${cust?.name ?? "Customer"} · ${formatRupiahShort(total)}`, time: timeAgo(inv.issueDate), color: "bg-(--crm-st-active-bg) text-(--crm-st-active-text)", date: new Date(inv.issueDate).getTime() });
-    }
-    for (const q of quotes) {
-      const cust = customerById.get(q.customerId);
-      const total = computeTotals(q.items, q.discount, q.tax).total;
-      items.push({ key: `q-${q.id}`, icon: ScrollText, title: `Quote ${q.number}`, detail: `${cust?.name ?? "Customer"} · ${formatRupiahShort(total)}`, time: timeAgo(q.issueDate), color: "bg-(--crm-st-draft-bg) text-(--crm-st-draft-text)", date: new Date(q.issueDate).getTime() });
-    }
-    for (const p of products) {
-      items.push({ key: `p-${p.id}`, icon: Package, title: "Product added", detail: `${p.name} · ${formatRupiahShort(p.price)}`, time: timeAgo(p.createdAt), color: "bg-(--crm-st-process-bg) text-(--crm-st-process-text)", date: new Date(p.createdAt).getTime() });
-    }
-    return items.sort((a, b) => b.date - a.date).slice(0, 6);
-  }, [customers, invoices, quotes, products, customerById]);
+  // ---- Expiring assets: domains/hosting due within 30 days (or already expired) ----
+  const expiringAssets = useMemo(() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+    const cutoff = new Date(now);
+    cutoff.setDate(cutoff.getDate() + 30);
+    return webAssets
+      .filter((a) => {
+        if (!a.expiryDate) return false;
+        const exp = new Date(a.expiryDate);
+        exp.setHours(0, 0, 0, 0);
+        return exp <= cutoff;
+      })
+      .map((asset) => ({ asset, days: daysUntil(asset.expiryDate) }))
+      .sort((a, b) => a.days - b.days)
+      .slice(0, 6);
+  }, [webAssets]);
 
   function announce(message: string) {
     setToast(message);
@@ -229,6 +224,35 @@ export function CRMBoard() {
     announce(`Invoice ${number} created from quote ${quote.number}`);
   }
 
+  /** Create a new invoice to renew an expiring domain/hosting for the following year. */
+  function createRenewalInvoice(asset: WebAsset) {
+    if (!asset.customerId) {
+      announce("This asset has no owner yet — assign one first");
+      return;
+    }
+    const nextYear = new Date().getFullYear() + 1;
+    const price = asset.sellPrice > 0 ? asset.sellPrice : asset.price;
+    const number = nextNumber("INV", invoices.map((i) => i.number));
+    const issued = new Date();
+    const due = new Date(issued);
+    due.setDate(due.getDate() + 14);
+    const invoice = {
+      id: uid(),
+      number,
+      customerId: asset.customerId,
+      items: [{ id: uid(), name: `${asset.name} — annual renewal ${nextYear}`, qty: 1, price }],
+      discount: 0,
+      tax: 0,
+      status: "Active" as const,
+      issueDate: issued.toISOString().slice(0, 10),
+      dueDate: due.toISOString().slice(0, 10),
+      notes: `Renewal for ${asset.name} (${asset.provider}). Previously valid until ${formatDate(asset.expiryDate)}.`,
+    };
+    addInvoice(invoice);
+    setExpiringDetail(null);
+    announce(`Invoice ${number} created for ${asset.name} renewal`);
+  }
+
   const today = formatDateLong(new Date().toISOString());
 
   return (      <CrmShell title={`${greeting()}, ${adminName}`} subtitle={today}>
@@ -250,7 +274,7 @@ export function CRMBoard() {
             </div>
             <span className="text-[10px] text-(--crm-muted)">{row.label}</span>
           </div>); })}</div><div className="mt-10 flex items-center gap-5 text-[11px] text-(--crm-muted)"><span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm bg-(--crm-chart-committed)" />Committed</span><span className="flex items-center gap-1.5"><i className="h-2 w-2 rounded-sm bg-(--crm-accent)" />Won</span><span className="ml-auto font-semibold text-(--crm-brand)">{formatRupiahShort(chartTotals.total)} total · {chartTotals.total > 0 ? Math.round((chartTotals.won / chartTotals.total) * 100) : 0}% won</span></div></div>
-        <div className="rounded-2xl border border-(--crm-border) bg-(--crm-panel) p-5 sm:p-6"><div className="flex items-start justify-between"><div><h3 className="font-semibold tracking-[-.02em]">Recent activity</h3><p className="mt-1 text-xs text-(--crm-muted)">Latest customers, invoices, quotes & products</p></div><button onClick={() => announce("Activity view selected")} className="text-xs font-semibold text-(--crm-brand) hover:text-(--crm-primary)">View all</button></div><div className="mt-5 space-y-4">{activities.map((item) => { const Icon = item.icon; return <div key={item.key} className="flex gap-3"><div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${item.color}`}><Icon size={15} /></div><div className="min-w-0 flex-1"><p className="text-xs font-semibold text-(--crm-fg)">{item.title}</p><p className="mt-0.5 truncate text-[11px] text-(--crm-muted)">{item.detail}</p></div><span className="shrink-0 text-[10px] text-(--crm-muted)">{item.time}</span></div> })}</div></div>
+        <div className="rounded-2xl border border-(--crm-border) bg-(--crm-panel) p-5 sm:p-6"><div className="flex items-start justify-between"><div><h3 className="font-semibold tracking-[-.02em]">Expiring soon</h3><p className="mt-1 text-xs text-(--crm-muted)">Domains & hosting due within 30 days</p></div><Link href="/web-assets" className="text-xs font-semibold text-(--crm-brand) hover:text-(--crm-primary)">View all</Link></div><div className="mt-5 space-y-4">{expiringAssets.map(({ asset, days }) => { const Icon = asset.type === "domain" ? Globe : Server; const cust = customerById.get(asset.customerId); const expired = days < 0; return <button key={asset.id} onClick={() => setExpiringDetail(asset)} className="flex w-full gap-3 text-left"><div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${expired ? "bg-(--crm-danger-bg) text-(--crm-danger)" : "bg-(--crm-st-active-bg) text-(--crm-st-active-text)"}`}><Icon size={15} /></div><div className="min-w-0 flex-1"><p className="truncate text-xs font-semibold text-(--crm-fg)">{asset.name}</p><p className="mt-0.5 truncate text-[11px] text-(--crm-muted)">{cust?.name ?? "No owner"} · {asset.type} · {asset.provider}</p></div><span className={`shrink-0 font-mono text-[10px] ${expired ? "text-(--crm-danger)" : "text-(--crm-muted)"}`}>{expired ? "Expired" : `in ${days}d`}</span></button> })}</div>{expiringAssets.length === 0 && <div className="mt-5 rounded-xl border border-dashed border-(--crm-border) py-8 text-center"><Check size={20} className="mx-auto text-(--crm-faint)" /><p className="mt-3 text-xs font-semibold">All assets up to date</p><p className="mt-1 text-[11px] text-(--crm-muted)">Nothing expires in the next 30 days, nice work.</p></div>}</div>
       </section>
 
       <section className="crm-rise crm-delay-3 mt-5 rounded-2xl border border-(--crm-border) bg-(--crm-panel)">
@@ -324,6 +348,43 @@ export function CRMBoard() {
           <QuoteDetailBody quote={quoteDetail} customer={quoteDetailCustomer} />
         </RightDrawer>
       )}
+
+      {expiringDetail && (() => {
+        const cust = customerById.get(expiringDetail.customerId);
+        const days = daysUntil(expiringDetail.expiryDate);
+        const expired = days < 0;
+        const nextYear = new Date().getFullYear() + 1;
+        const renewalPrice = expiringDetail.sellPrice > 0 ? expiringDetail.sellPrice : expiringDetail.price;
+        const Icon = expiringDetail.type === "domain" ? Globe : Server;
+        const mailto = cust?.email
+          ? `mailto:${cust.email}?subject=${encodeURIComponent(`Renewal ${expiringDetail.name} (${nextYear})`)}&body=${encodeURIComponent(`Hi ${cust.name},\n\nYour ${expiringDetail.type} ${expiringDetail.name} expires on ${formatDateLong(expiringDetail.expiryDate)}. Renewal for the next year is ${formatRupiah(renewalPrice)}.\n\nWould you like to renew?\n\nBest regards,\n${siteName}`)}`
+          : null;
+        return (
+          <RightDrawer onClose={() => setExpiringDetail(null)} eyebrow="Renewal reminder" title={expiringDetail.name} widthClass="sm:w-[680px] lg:w-[760px]"
+            footer={<>
+              {mailto && <a href={mailto} className="flex items-center gap-2 rounded-xl border border-(--crm-border-input) px-4 py-2.5 text-sm font-semibold text-(--crm-brand) hover:bg-(--crm-hover)"><Mail size={15} />Contact customer</a>}
+              <div className="flex-1" />
+              <button onClick={() => createRenewalInvoice(expiringDetail)} className="flex items-center gap-2 rounded-xl bg-(--crm-primary) px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-(--crm-dark)"><FileText size={15} />Create renewal invoice</button>
+            </>}>
+            <div className="flex items-center gap-3 rounded-xl border border-(--crm-border) bg-(--crm-surface) p-4">
+              <div className={`flex h-10 w-10 items-center justify-center rounded-xl ${expired ? "bg-(--crm-danger-bg) text-(--crm-danger)" : "bg-(--crm-st-active-bg) text-(--crm-st-active-text)"}`}><Icon size={18} /></div>
+              <div>
+                <p className="text-sm font-semibold capitalize">{expiringDetail.type} · {expiringDetail.provider}</p>
+                <p className="mt-0.5 text-[11px] text-(--crm-muted)">Annual renewal for {nextYear}</p>
+              </div>
+            </div>
+            <div className="mt-5 grid gap-x-8 gap-y-4 sm:grid-cols-2">
+              <div><p className="text-[10px] font-semibold uppercase tracking-[.12em] text-(--crm-label)">Owner</p><p className="mt-1.5 text-sm font-semibold">{cust?.name ?? "No customer"}</p><p className="mt-1 font-mono text-[11px] text-(--crm-fg)">{cust?.code ? `Cust ID ${cust.code}` : "—"}</p></div>
+              <div><p className="text-[10px] font-semibold uppercase tracking-[.12em] text-(--crm-label)">Contact</p><p className="mt-1.5 text-sm text-(--crm-secondary)">{cust?.email ?? "—"}</p><p className="mt-1 text-xs text-(--crm-muted)">{cust?.phones.length ? formatPhones(cust.phones) : "—"}</p></div>
+              <div><p className="text-[10px] font-semibold uppercase tracking-[.12em] text-(--crm-label)">Valid until</p><p className="mt-1.5 text-sm text-(--crm-secondary)">{formatDateLong(expiringDetail.expiryDate)}</p><p className={`mt-1 text-xs font-semibold ${expired ? "text-(--crm-danger)" : "text-(--crm-brand)"}`}>{expired ? "Expired" : `${days} days remaining`}</p></div>
+              <div><p className="text-[10px] font-semibold uppercase tracking-[.12em] text-(--crm-label)">Renewal price</p><p className="mt-1.5 text-sm font-semibold">{formatRupiah(renewalPrice)}</p><p className="mt-1 text-[11px] text-(--crm-muted)">{expiringDetail.sellPrice > 0 ? "from asset sell price" : "from asset cost"}</p></div>
+            </div>
+            <div className={`mt-5 rounded-xl border p-4 text-xs leading-relaxed ${expired ? "border-(--crm-danger-border) bg-(--crm-danger-bg) text-(--crm-danger)" : "border-(--crm-border) bg-(--crm-surface) text-(--crm-secondary)"}`}>
+              {expired ? `This ${expiringDetail.type} expired on ${formatDate(expiringDetail.expiryDate)}. Contact ${cust?.name ?? "the customer"} right away and create the next year's invoice.` : `This ${expiringDetail.type} expires in ${days} days. Contact ${cust?.name ?? "the customer"} to renew and create the next year's invoice.`}
+            </div>
+          </RightDrawer>
+        );
+      })()}
 
       {confirmDeleteCustomer && (
         <ConfirmModal
