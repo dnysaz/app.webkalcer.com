@@ -218,31 +218,31 @@ export function formatRupiah(value: number): string {
 
 export function formatRupiahShort(value: number): string {
   if (value >= 1_000_000_000) {
-    return `Rp ${(value / 1_000_000_000).toLocaleString("id-ID", { maximumFractionDigits: 1 })}M`;
+    return `Rp ${(value / 1_000_000_000).toLocaleString("en-US", { maximumFractionDigits: 1 })}B`;
   }
   if (value >= 1_000_000) {
-    return `Rp ${(value / 1_000_000).toLocaleString("id-ID", { maximumFractionDigits: 1 })}jt`;
+    return `Rp ${(value / 1_000_000).toLocaleString("en-US", { maximumFractionDigits: 1 })}M`;
   }
   if (value >= 1_000) {
-    return `Rp ${(value / 1_000).toLocaleString("id-ID", { maximumFractionDigits: 0 })}rb`;
+    return `Rp ${(value / 1_000).toLocaleString("en-US", { maximumFractionDigits: 0 })}K`;
   }
   return formatRupiah(value);
 }
 
 export function formatDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("id-ID", {
-    day: "numeric",
+  return new Date(iso).toLocaleDateString("en-US", {
     month: "short",
+    day: "numeric",
     year: "numeric",
   });
 }
 
 export function formatDateLong(iso: string): string {
-  return new Date(iso).toLocaleDateString("id-ID", {
+  return new Date(iso).toLocaleDateString("en-US", {
     weekday: "long",
-    day: "numeric",
-    month: "long",
     year: "numeric",
+    month: "long",
+    day: "numeric",
   });
 }
 
