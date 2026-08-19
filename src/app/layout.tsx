@@ -27,7 +27,7 @@ const spaceMono = Space_Mono({
 
 export const metadata: Metadata = {
   title: DEFAULT_SETTINGS.siteName,
-  description: "CRM by webkalcer.com untuk kelola customer, invoice, penawaran, dan produk.",
+  description: "CRM by webkalcer.com to manage customers, invoices, quotes, and products.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

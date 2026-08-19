@@ -500,16 +500,16 @@ export function ContentSeoView() {
               <div className="mt-5 space-y-4">
                 <div>
                   <Label>Topic *</Label>
-                  <input value={form.topic} onChange={(e) => set("topic", e.target.value)} placeholder="e.g. Tips memilih web hosting untuk UMKM" className={inputCls} />
+                  <input value={form.topic} onChange={(e) => set("topic", e.target.value)} placeholder="e.g. How to choose web hosting for SMEs" className={inputCls} />
                 </div>
                 <div>
                   <Label>Target keyword (SEO)</Label>
-                  <input value={form.keyword} onChange={(e) => set("keyword", e.target.value)} placeholder="e.g. web hosting murah untuk UMKM" className={inputCls} />
-                  <p className="mt-1 text-[11px] text-(--crm-muted)">Artikel dioptimalkan untuk keyword ini supaya bisa ranking & menjual. Kosongkan untuk dibiarkan AI menentukan.</p>
+                  <input value={form.keyword} onChange={(e) => set("keyword", e.target.value)} placeholder="e.g. affordable web hosting for SMEs" className={inputCls} />
+                  <p className="mt-1 text-[11px] text-(--crm-muted)">The article is optimized for this keyword to rank and convert. Leave empty to let the AI decide.</p>
                 </div>
                 <div>
                   <Label>Description *</Label>
-                  <textarea value={form.description} onChange={(e) => set("description", e.target.value)} rows={5} placeholder="Jelaskan isi artikel yang kamu mau, target pembaca, poin-poin penting…" className={areaCls} />
+                  <textarea value={form.description} onChange={(e) => set("description", e.target.value)} rows={5} placeholder="Describe the article you want, target reader, and key points…" className={areaCls} />
                 </div>
                 <div>
                   <Label>Article length</Label>
@@ -533,7 +533,7 @@ export function ContentSeoView() {
                 </div>
                 <div>
                   <Label>Paste links to embed</Label>
-                  <textarea value={form.links} onChange={(e) => set("links", e.target.value)} rows={3} placeholder="https://… (satu link per baris, disisipkan ke artikel)" className={areaCls} />
+                  <textarea value={form.links} onChange={(e) => set("links", e.target.value)} rows={3} placeholder="https://… (one link per line, inserted into the article)" className={areaCls} />
                 </div>
                 <div>
                   <Label>Language</Label>
