@@ -104,6 +104,7 @@ async function runSetupDatabase() {
     notes text DEFAULT '',
     created_at timestamptz NOT NULL DEFAULT now()
   )`;
+  await sql`ALTER TABLE web_assets ADD COLUMN IF NOT EXISTS sell_price integer NOT NULL DEFAULT 0`;
 
   await sql`CREATE TABLE IF NOT EXISTS users (
     id text PRIMARY KEY,

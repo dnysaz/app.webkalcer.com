@@ -112,7 +112,10 @@ export type WebAsset = {
   provider: string;
   startDate: string;
   expiryDate: string;
+  /** Harga modal / cost paid for the asset (Rp). */
   price: number;
+  /** Harga jual to the customer (Rp). 0 = not set yet. */
+  sellPrice: number;
   notes: string;
   createdAt: string;
 };

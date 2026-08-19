@@ -22,6 +22,32 @@ export interface DomainCheckResult {
   currency: string;
   suggestedDomain: string;
   ttlRemaining: number | null;
+  /** USD → IDR rate used to convert the prices above. */
+  rate: number;
+}
+
+/** Fallback USD→IDR rate when the live rate can't be fetched. */
+const USD_TO_IDR_FALLBACK = 16000;
+
+/**
+ * Returns the current USD → IDR exchange rate (IDR per 1 USD).
+ * Fetches from Frankfurter (ECB data, free, no key) with a fixed fallback.
+ */
+export async function getUsdToIdrRate(): Promise<number> {
+  try {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 8000);
+    const res = await fetch("https://api.frankfurter.dev/v1/latest?base=USD&symbols=IDR", { signal: controller.signal });
+    clearTimeout(timer);
+    if (res.ok) {
+      const data = (await res.json()) as { rates?: { IDR?: number } };
+      const rate = Number(data.rates?.IDR);
+      if (rate > 0) return rate;
+    }
+  } catch {
+    // Network or timeout — fall through to the fixed fallback rate.
+  }
+  return USD_TO_IDR_FALLBACK;
 }
 
 /**
@@ -93,6 +119,7 @@ export async function checkDomainPricing(domain: string): Promise<DomainCheckRes
     throw new Error(data.message || `Porkbun domain check failed (${res.status}).`);
   }
   const r = data.response ?? {};
+  const rate = await getUsdToIdrRate();
   return {
     domain: r.domain ?? domain,
     available: r.avail === "yes",
@@ -104,5 +131,6 @@ export async function checkDomainPricing(domain: string): Promise<DomainCheckRes
     currency: r.currency ?? "USD",
     suggestedDomain: r.suggestedDomain ?? "",
     ttlRemaining: typeof data.ttlRemaining === "number" ? data.ttlRemaining : null,
+    rate,
   };
 }

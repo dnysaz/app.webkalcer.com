@@ -54,7 +54,7 @@ export function WebAssetCatalogModal({
                     <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl border border-(--crm-border) bg-(--crm-surface) text-(--crm-brand)"><Icon size={18} /></div>
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2"><p className="truncate text-sm font-semibold">{asset.name}</p><span className="shrink-0 rounded-full bg-(--crm-surface) px-2 py-0.5 text-[10px] font-semibold capitalize text-(--crm-secondary)">{asset.type}</span></div>
-                      <p className="mt-0.5 truncate text-[11px] text-(--crm-muted)">{customer?.name ?? "No owner"} · {formatRupiah(asset.price)}</p>
+                      <p className="mt-0.5 truncate text-[11px] text-(--crm-muted)">{customer?.name ?? "No owner"} · {formatRupiah(asset.sellPrice > 0 ? asset.sellPrice : asset.price)}</p>
                     </div>
                     <button onClick={() => onPick(asset)} className="flex shrink-0 items-center gap-1.5 rounded-lg bg-(--crm-primary) px-3 py-2 text-[11px] font-semibold text-white hover:bg-(--crm-dark)"><Plus size={13} />Add</button>
                   </li>

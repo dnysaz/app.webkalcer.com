@@ -103,7 +103,7 @@ export function InvoicesView() {
   }
 
   function addFromWebAsset(asset: WebAsset) {
-    setDraft((prev) => ({ ...prev, items: [...prev.items, { id: uid(), name: asset.name, qty: 1, price: asset.price }] }));
+    setDraft((prev) => ({ ...prev, items: [...prev.items, { id: uid(), name: asset.name, qty: 1, price: asset.sellPrice > 0 ? asset.sellPrice : asset.price }] }));
     setWebAssetCatalog(false);
     announce(`${asset.type === "domain" ? "Domain" : "Hosting"} ${asset.name} added to items`);
   }

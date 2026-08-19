@@ -50,6 +50,7 @@ const emptyForm = {
   startDate: "",
   expiryDate: "",
   price: 0,
+  sellPrice: 0,
   notes: "",
 };
 
@@ -100,6 +101,7 @@ export function DomainHostingView() {
       startDate: asset.startDate,
       expiryDate: asset.expiryDate,
       price: asset.price,
+      sellPrice: asset.sellPrice ?? 0,
       notes: asset.notes,
     });
     setShowForm(true);
@@ -153,7 +155,7 @@ export function DomainHostingView() {
         <button onClick={() => setTab("prices")} className={`flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-semibold transition-colors ${tab === "prices" ? "bg-(--crm-surface) text-(--crm-text) shadow-sm" : "text-(--crm-muted)"}`}><Tag size={15} />Price Finder</button>
       </div>
 
-      {tab === "prices" ? <div className="mt-6"><PriceFinderView /></div> : (
+      {tab === "prices" ? <div className="mt-6"><PriceFinderView onSaved={() => { setTab("assets"); announce("Domain asset saved."); }} /></div> : (
       <div className="crm-rise mt-6 rounded-2xl border border-(--crm-border) bg-(--crm-panel)">
         <div className="flex flex-col gap-4 border-b border-(--crm-border) p-5 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
           <div><h3 className="font-semibold tracking-[-.02em]">Asset list</h3><p className="mt-1 text-xs text-(--crm-muted)">{filtered.length} of {webAssets.length} assets</p></div>
@@ -175,13 +177,19 @@ export function DomainHostingView() {
                 const info = typeTone[asset.type];
                 const expiry = expiryInfo(asset.expiryDate);
                 const Icon = info.icon;
+                const sell = asset.sellPrice > 0 ? asset.sellPrice : asset.price;
+                const margin = asset.price > 0 && asset.sellPrice > 0 ? asset.sellPrice - asset.price : 0;
                 return (
                   <tr key={asset.id} className="cursor-pointer border-t border-(--crm-border-soft) transition-colors hover:bg-(--crm-hover)" onClick={() => setDetail(asset)}>
                     <td className="px-6 py-4"><div className="flex items-center gap-3"><div className={`flex h-9 w-9 items-center justify-center rounded-xl ${info.color}`}><Icon size={16} /></div><div><p className="text-sm font-semibold">{asset.name}</p><p className="mt-0.5 flex items-center gap-1.5"><span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold capitalize ${info.badge}`}>{asset.type}</span>{expiry && <span className={`rounded-full px-2 py-0.5 text-[10px] font-semibold ${expiry.tone}`}>{expiry.label}</span>}</p></div></div></td>
                     <td className="px-4 py-4"><p className="text-sm font-medium">{customer?.name ?? "—"}</p><p className="mt-0.5 text-[11px] text-(--crm-muted)">{customer?.businessName ?? ""}</p></td>
                     <td className="px-4 py-4 text-xs text-(--crm-muted)">{asset.provider || "—"}</td>
                     <td className="px-4 py-4 text-xs text-(--crm-muted)">{asset.startDate ? formatDate(asset.startDate) : "—"} → {asset.expiryDate ? formatDate(asset.expiryDate) : "—"}</td>
-                    <td className="px-4 py-4 text-sm font-semibold">{formatRupiah(asset.price)}</td>
+                    <td className="px-4 py-4">
+                      <p className="text-sm font-semibold">{formatRupiah(sell)}</p>
+                      {asset.price > 0 && <p className="text-[10px] text-(--crm-muted)">Modal {formatRupiah(asset.price)}</p>}
+                      {margin !== 0 && <p className={`text-[10px] font-semibold ${margin > 0 ? "text-emerald-600" : "text-(--crm-danger)"}`}>{margin > 0 ? "Laba" : "Rugi"} {formatRupiah(margin)}</p>}
+                    </td>
                     <td className="px-6 py-4"><div className="flex justify-end gap-1.5"><button onClick={(event) => { event.stopPropagation(); openEdit(asset); }} className="rounded-lg border border-(--crm-border-input) p-2 text-(--crm-brand) hover:bg-(--crm-hover)" aria-label="Edit"><Pencil size={14} /></button><button onClick={(event) => { event.stopPropagation(); setConfirmDelete(asset); }} className="rounded-lg border border-(--crm-danger-border) p-2 text-(--crm-danger) hover:bg-(--crm-danger-bg)" aria-label="Delete"><Trash2 size={14} /></button></div></td>
                   </tr>
                 );
@@ -199,7 +207,7 @@ export function DomainHostingView() {
             return (
               <button key={asset.id} onClick={() => setDetail(asset)} className="flex w-full items-center gap-3 p-4 text-left">
                 <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${info.color}`}><Icon size={16} /></div>
-                <div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="truncate text-sm font-semibold">{asset.name}</p>{expiry && <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${expiry.tone}`}>{expiry.label}</span>}</div><p className="mt-0.5 truncate text-[11px] text-(--crm-muted)">{customer?.name ?? "—"} · {asset.provider || asset.type} · {formatRupiah(asset.price)}</p></div>
+                <div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="truncate text-sm font-semibold">{asset.name}</p>{expiry && <span className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold ${expiry.tone}`}>{expiry.label}</span>}</div><p className="mt-0.5 truncate text-[11px] text-(--crm-muted)">{customer?.name ?? "—"} · {asset.provider || asset.type} · {formatRupiah(asset.sellPrice > 0 ? asset.sellPrice : asset.price)}</p></div>
               </button>
             );
           })}
@@ -220,7 +228,9 @@ export function DomainHostingView() {
               <Field label="Owner / Customer *" icon={UserRound}><CustomerSearch customers={customers} value={form.customerId} onChange={(customerId) => setForm({ ...form, customerId })} /></Field>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Provider" icon={Building2}><input value={form.provider} onChange={(event) => setForm({ ...form, provider: event.target.value })} placeholder="e.g. Niagahoster, Domainesia" className={inputCls} /></Field>
-                <Field label="Price (Rp)" icon={Server}><NumberInput value={form.price} onChange={(v) => setForm({ ...form, price: v })} min={0} placeholder="0" className={inputCls} /></Field>
+                <div />
+                <Field label="Harga modal (Rp)" icon={Server}><NumberInput value={form.price} onChange={(v) => setForm({ ...form, price: v })} min={0} placeholder="0" className={inputCls} /></Field>
+                <Field label="Harga jual (Rp)" icon={Server}><NumberInput value={form.sellPrice} onChange={(v) => setForm({ ...form, sellPrice: v })} min={0} placeholder="0" className={inputCls} /></Field>
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
                 <Field label="Active from" icon={CalendarDays}><input type="date" value={form.startDate} onChange={(event) => setForm({ ...form, startDate: event.target.value })} className={inputCls} /></Field>
@@ -244,7 +254,7 @@ export function DomainHostingView() {
               <InfoRow icon={UserRound} label="Owner Cust ID" value={customerById.get(detail.customerId)?.code || "—"} />
               <InfoRow icon={Mail} label="Owner email" value={customerById.get(detail.customerId)?.email || "—"} />
               <InfoRow icon={Building2} label="Provider" value={detail.provider || "—"} />
-              <InfoRow icon={Server} label="Price" value={formatRupiah(detail.price)} />
+              <InfoRow icon={Server} label="Harga jual" value={formatRupiah(detail.sellPrice > 0 ? detail.sellPrice : detail.price)} />
               <InfoRow icon={CalendarDays} label="Active from" value={detail.startDate ? formatDate(detail.startDate) : "—"} />
               <InfoRow icon={CalendarDays} label="Expires on" value={detail.expiryDate ? formatDate(detail.expiryDate) : "—"} />
             </div>

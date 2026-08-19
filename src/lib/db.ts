@@ -95,6 +95,7 @@ export interface WebAssetRow {
   start_date: string | null;
   expiry_date: string | null;
   price: number | null;
+  sell_price: number | null;
   notes: string | null;
   created_at: Date | string;
 }
@@ -227,6 +228,7 @@ export function rowToWebAsset(row: WebAssetRow): WebAsset {
     startDate: row.start_date ?? "",
     expiryDate: row.expiry_date ?? "",
     price: Number(row.price ?? 0),
+    sellPrice: Number(row.sell_price ?? 0),
     notes: row.notes ?? "",
     createdAt: toIso(row.created_at),
   };

@@ -14,7 +14,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
     UPDATE web_assets
     SET type = ${body.type}, name = ${body.name}, customer_id = ${body.customerId},
         provider = ${body.provider}, start_date = ${body.startDate}, expiry_date = ${body.expiryDate},
-        price = ${body.price}, notes = ${body.notes}
+        price = ${body.price}, sell_price = ${body.sellPrice ?? 0}, notes = ${body.notes}
     WHERE id = ${id}`;
   return NextResponse.json(body);
 }

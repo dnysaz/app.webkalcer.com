@@ -17,7 +17,7 @@ export async function POST(request: Request) {
   const sql = getSql();
   const body = (await request.json()) as WebAsset;
   await sql`
-    INSERT INTO web_assets (id, type, name, customer_id, provider, start_date, expiry_date, price, notes, created_at)
-    VALUES (${body.id}, ${body.type}, ${body.name}, ${body.customerId}, ${body.provider}, ${body.startDate}, ${body.expiryDate}, ${body.price}, ${body.notes}, ${body.createdAt})`;
+    INSERT INTO web_assets (id, type, name, customer_id, provider, start_date, expiry_date, price, sell_price, notes, created_at)
+    VALUES (${body.id}, ${body.type}, ${body.name}, ${body.customerId}, ${body.provider}, ${body.startDate}, ${body.expiryDate}, ${body.price}, ${body.sellPrice ?? 0}, ${body.notes}, ${body.createdAt})`;
   return NextResponse.json(body);
 }
