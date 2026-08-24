@@ -12,6 +12,8 @@ import {
   Link2,
   List,
   ListOrdered,
+  Maximize2,
+  Minimize2,
   Plus,
   Redo2,
   Search,
@@ -84,6 +86,7 @@ export function NotesView() {
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; title: string } | null>(null);
   const [shareNote, setShareNote] = useState<{ id: string; title: string } | null>(null);
   const [saveMenuOpen, setSaveMenuOpen] = useState(false);
+  const [fullscreen, setFullscreen] = useState(false);
   const [toast, setToast] = useState("");
   const [search, setSearch] = useState("");
   const savedTimer = useRef<number | null>(null);
@@ -127,6 +130,15 @@ export function NotesView() {
   useEffect(() => () => {
     if (savedTimer.current) window.clearTimeout(savedTimer.current);
   }, []);
+
+  // ESC key exits fullscreen
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape" && fullscreen) setFullscreen(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [fullscreen]);
 
   const sortedNotes = useMemo(
     () => [...notes].sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()),
@@ -320,6 +332,63 @@ export function NotesView() {
 
   // ---------------- Editor (MS Word style paper) ----------------
   if (editor) {
+    // ---- Fullscreen mode ----
+    if (fullscreen) {
+      const fsToolbarBtn = "flex items-center justify-center rounded-lg p-2.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-700";
+      const fsSep = "my-1 w-6 h-px bg-gray-200";
+      return (
+        <div className="fixed inset-0 z-[80] flex bg-white">
+          {/* Vertical toolbar — left side */}
+          <div className="flex w-14 shrink-0 flex-col items-center gap-1 border-r border-gray-100 py-4">
+            <button onMouseDown={(e) => e.preventDefault()} onClick={() => exec("bold")} className={fsToolbarBtn} title="Bold"><Bold size={17} /></button>
+            <button onMouseDown={(e) => e.preventDefault()} onClick={() => exec("italic")} className={fsToolbarBtn} title="Italic"><Italic size={17} /></button>
+            <button onMouseDown={(e) => e.preventDefault()} onClick={() => exec("underline")} className={fsToolbarBtn} title="Underline"><Underline size={17} /></button>
+            <button onMouseDown={(e) => e.preventDefault()} onClick={() => exec("strikeThrough")} className={fsToolbarBtn} title="Strikethrough"><Strikethrough size={17} /></button>
+            <div className={fsSep} />
+            <button onMouseDown={(e) => e.preventDefault()} onClick={() => exec("insertUnorderedList")} className={fsToolbarBtn} title="Bullet list"><List size={17} /></button>
+            <button onMouseDown={(e) => e.preventDefault()} onClick={() => exec("insertOrderedList")} className={fsToolbarBtn} title="Numbered list"><ListOrdered size={17} /></button>
+            <div className={fsSep} />
+            <button onMouseDown={(e) => e.preventDefault()} onClick={() => exec("undo")} className={fsToolbarBtn} title="Undo"><Undo2 size={17} /></button>
+            <button onMouseDown={(e) => e.preventDefault()} onClick={() => exec("redo")} className={fsToolbarBtn} title="Redo"><Redo2 size={17} /></button>
+            {/* Spacer pushes exit to bottom */}
+            <div className="flex-1" />
+            <div className={fsSep} />
+            <button onClick={() => setFullscreen(false)} className={fsToolbarBtn} title="Exit fullscreen (Esc)"><Minimize2 size={17} /></button>
+          </div>
+
+          {/* Paper centered */}
+          <div className="flex flex-1 items-start justify-center overflow-y-auto px-6 py-10 sm:px-10">
+            <div className="flex w-full max-w-[780px] flex-col">
+              {/* Title */}
+              <input
+                value={editor.title}
+                onChange={(event) => updateDraft({ title: event.target.value })}
+                placeholder="Untitled note"
+                maxLength={160}
+                className="w-full bg-transparent text-4xl font-bold tracking-tight text-gray-900 outline-none placeholder:text-gray-300 sm:text-5xl"
+              />
+              <div className="my-6 h-px bg-gray-100" />
+              {/* Content */}
+              <div
+                ref={contentRef}
+                contentEditable
+                suppressContentEditableWarning
+                role="textbox"
+                aria-multiline="true"
+                data-ph="Start writing…"
+                onInput={(event) => updateDraft({ content: (event.currentTarget as HTMLDivElement).innerHTML })}
+                className="note-editor min-h-[50vh] w-full bg-transparent text-lg leading-9 text-gray-800 outline-none [&_div]:mb-1 [&_h1]:text-3xl [&_h1]:font-bold [&_h2]:text-2xl [&_h2]:font-semibold [&_ul]:list-disc [&_ul]:pl-6 [&_ol]:list-decimal [&_ol]:pl-6 [&_a]:text-blue-600 [&_a]:underline"
+              />
+            </div>
+          </div>
+
+          {/* Toast */}
+          {toast && <div className="fixed bottom-5 left-1/2 z-[90] -translate-x-1/2 rounded-xl bg-gray-900 px-4 py-3 text-xs font-semibold text-white shadow-xl">{toast}</div>}
+        </div>
+      );
+    }
+
+    // ---- Normal editor ----
     return (
       <CrmShell title="Notes" subtitle="Project notes">
         <div className="crm-rise mx-auto flex w-full max-w-5xl flex-col items-center">
@@ -358,7 +427,8 @@ export function NotesView() {
                   </>
                 )}
               </div>
-              <button onClick={handleBack} className="flex items-center gap-1.5 rounded-lg bg-(--crm-primary) px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition-all hover:bg-(--crm-dark)"><ArrowLeft size={14} />Back</button>
+              <button onClick={() => setFullscreen(true)} className="flex items-center gap-1.5 rounded-lg border border-(--crm-border) bg-(--crm-surface) px-2.5 py-1.5 text-xs font-semibold text-(--crm-secondary) transition-colors hover:bg-(--crm-hover)" title="Fullscreen"><Maximize2 size={14} /></button>
+              <button onClick={handleBack} className="flex items-center gap-1.5 rounded-lg bg-(--crm-primary) px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition-all hover:bg(--crm-dark)"><ArrowLeft size={14} />Back</button>
             </div>
           </div>
 
