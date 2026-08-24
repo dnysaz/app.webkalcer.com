@@ -123,9 +123,9 @@ export function NotesView() {
     if (node.innerHTML !== display) {
       node.innerHTML = display;
     }
-    // Intentionally runs only when the edited note changes, not per keystroke.
+    // Intentionally runs only when the edited note or view mode changes, not per keystroke.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor?.id]);
+  }, [editor?.id, fullscreen]);
 
   useEffect(() => () => {
     if (savedTimer.current) window.clearTimeout(savedTimer.current);
