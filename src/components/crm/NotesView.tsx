@@ -173,6 +173,28 @@ export function NotesView() {
     }
   }
 
+  /** Save the current note (if non-empty) then open a blank note. */
+  function handleNewNote() {
+    if (!editor) return;
+    const title = editor.title.trim();
+    const content = editor.content.trim();
+    clearDraft();
+    if (title || toPlainText(content)) {
+      const now = new Date().toISOString();
+      const finalTitle = title || "Untitled note";
+      if (editor.id) {
+        const existing = notes.find((n) => n.id === editor.id);
+        if (existing) {
+          updateNote({ ...existing, title: finalTitle, content, updatedAt: now });
+        }
+      } else {
+        addNote({ id: uid(), title: finalTitle, content, createdAt: now, updatedAt: now });
+      }
+      announce("Note saved");
+    }
+    setEditor({ id: null, title: "", content: "" });
+  }
+
   function downloadTxt() {
     if (!editor) return;
     const title = editor.title.trim() || "Untitled note";
@@ -254,6 +276,7 @@ export function NotesView() {
               <button onMouseDown={(e) => e.preventDefault()} onClick={() => exec("redo")} className="rounded-lg p-2 text-(--crm-secondary) transition-colors hover:bg-(--crm-soft) hover:text-(--crm-fg)" title="Redo" aria-label="Redo"><Redo2 size={15} /></button>
             </div>
             <div className="flex items-center gap-2">
+              <button onClick={handleNewNote} className="flex items-center gap-1.5 rounded-lg border border-(--crm-border) bg-(--crm-surface) px-3 py-1.5 text-xs font-semibold text-(--crm-secondary) transition-colors hover:bg-(--crm-hover)" title="Save current & new note"><Plus size={14} />New Note</button>
               <button onClick={downloadTxt} className="flex items-center gap-1.5 rounded-lg border border-(--crm-border) bg-(--crm-surface) px-3 py-1.5 text-xs font-semibold text-(--crm-secondary) transition-colors hover:bg-(--crm-hover)" title="Save as .txt"><FileDown size={14} />Save .txt</button>
               <button onClick={handleBack} className="flex items-center gap-1.5 rounded-lg bg-(--crm-primary) px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition-all hover:bg-(--crm-dark)"><ArrowLeft size={14} />Back</button>
             </div>
