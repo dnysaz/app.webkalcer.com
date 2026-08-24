@@ -1310,28 +1310,29 @@ function renderRun(doc: jsPDF, run: { text: string; bold: boolean; italic: boole
   return x + tw;
 }
 
-/** Render a block-level element (div/ul/ol/p), returning the next Y. */
+/**
+ * Render a block-level element (div/ul/ol/p) from the contentEditable HTML.
+ * Each <div> is one line, <br> is a soft break within a line.
+ * Returns the next Y position.
+ */
 function renderBlock(doc: jsPDF, el: HTMLElement, y: number, w: number, pageBreak: () => number): number {
   const tag = el.tagName.toLowerCase();
 
-  // List items
+  // ---- List ----
   if (tag === "ul" || tag === "ol") {
     const items = el.querySelectorAll(":scope > li");
     let idx = 0;
     items.forEach((li) => {
       idx++;
       if (y + 6 > pageBreak()) { doc.addPage(); y = 22; }
-      const bullet = tag === "ol" ? `${idx}. ` : "•  ";
+      const bullet = tag === "ol" ? `${idx}. ` : "\u2022  ";
       const runs = collectRuns(li);
-      // Render bullet/number prefix
       setFontSafe(doc, "DMSans", "normal");
       doc.setFontSize(11);
       doc.setTextColor(...INK);
       doc.text(bullet, MARGIN, y);
       let x = MARGIN + doc.getTextWidth(bullet);
-      // Render inline runs, wrapping within content width
       for (const run of runs) {
-        const maxW = MARGIN + w - x;
         const words = run.text.split(/(\s)/);
         for (const word of words) {
           setFontSafe(doc, "DMSans", run.bold ? "bold" : "normal");
@@ -1350,12 +1351,50 @@ function renderBlock(doc: jsPDF, el: HTMLElement, y: number, w: number, pageBrea
     return y + 2;
   }
 
-  // Regular block (div, p, etc.) — render inline runs with word-wrap
-  const runs = collectRuns(el);
-  if (!runs.length) return y + 3;
+  // ---- Regular block (div, p, etc.) ----
+  // Collect all inline runs from the block, treating <br> as a line break marker.
+  const runs: { text: string; bold: boolean; italic: boolean; underline: boolean; br?: boolean }[] = [];
+  function walkInline(node: ChildNode) {
+    if (node.nodeType === 3) {
+      const t = node.textContent || "";
+      if (t) runs.push({ text: t, bold: false, italic: false, underline: false });
+    } else if (node.nodeType === 1) {
+      const n = node as HTMLElement;
+      const t = n.tagName.toLowerCase();
+      if (t === "br") {
+        runs.push({ text: "", bold: false, italic: false, underline: false, br: true });
+      } else {
+        const isBold = t === "b" || t === "strong";
+        const isItalic = t === "i" || t === "em";
+        const isUnderline = t === "u";
+        for (const child of n.childNodes) {
+          for (const r of collectRuns(child)) {
+            runs.push({
+              text: r.text,
+              bold: r.bold || isBold,
+              italic: r.italic || isItalic,
+              underline: r.underline || isUnderline,
+            });
+          }
+        }
+      }
+    }
+  }
+  for (const child of el.childNodes) walkInline(child);
 
+  // Empty block (<div></div> or <div><br></div>) → blank line spacing
+  const hasContent = runs.some((r) => (r.text && r.text.trim()) || r.br);
+  if (!hasContent) return y + 8;
+
+  // Render runs with word-wrap and <br> support
   let x = MARGIN;
   for (const run of runs) {
+    if (run.br) {
+      y += 5;
+      if (y > pageBreak()) { doc.addPage(); y = 22; }
+      x = MARGIN;
+      continue;
+    }
     const words = run.text.split(/(\s)/);
     for (const word of words) {
       setFontSafe(doc, "DMSans", run.bold ? "bold" : "normal");
@@ -1401,12 +1440,14 @@ export async function buildNotePdf(note: { title: string; content: string }): Pr
   doc.line(MARGIN, y, MARGIN + w, y);
   y += 8;
 
-  // Parse HTML content into blocks
+  // Parse HTML content into blocks — each <div> is one line from the editor
   const parsed = new DOMParser().parseFromString(note.content || "<div></div>", "text/html");
   const body = parsed.body;
-  for (const child of Array.from(body.childNodes)) {
+  const children = Array.from(body.childNodes);
+  for (let ci = 0; ci < children.length; ci++) {
+    const child = children[ci];
     if (child.nodeType === 3) {
-      // Top-level text node
+      // Top-level text node (rare, but handle it)
       const text = (child.textContent || "").trim();
       if (!text) continue;
       if (y + 6 > pageBreak()) { doc.addPage(); y = 22; }
