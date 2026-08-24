@@ -1262,3 +1262,78 @@ export function printPdf(doc: jsPDF) {
   const url = doc.output("bloburl");
   window.open(url, "_blank");
 }
+
+// ---- Note PDF ----
+
+/** Strip HTML tags and decode entities to get plain text. */
+function stripHtml(html: string): string {
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  return (doc.body.textContent || "").trim();
+}
+
+export async function buildNotePdf(note: { title: string; content: string; updatedAt: string }): Promise<jsPDF> {
+  refreshTheme();
+  const doc = new jsPDF();
+  await ensureFonts(doc);
+  const w = contentWidth(doc);
+  const pageBreak = () => pageHeight(doc) - 22;
+
+  // ---- Cover ----
+  drawHeader(doc, "NOTE", formatDate(note.updatedAt));
+  let y = 70;
+  setFontSafe(doc, "DMSansSemi");
+  doc.setFontSize(15);
+  doc.setTextColor(...DARK);
+  doc.text("Note", MARGIN, y);
+  y += 10;
+  setFontSafe(doc, "DMSans", "bold");
+  doc.setFontSize(24);
+  doc.setTextColor(...GREEN);
+  const titleLines = doc.splitTextToSize(note.title || "Untitled note", w) as string[];
+  for (const line of titleLines) {
+    doc.text(line, MARGIN, y);
+    y += 11;
+  }
+
+  // ---- Content ----
+  doc.addPage();
+  y = 30;
+  drawHeader(doc, "NOTE", formatDate(note.updatedAt));
+
+  // Convert HTML content to plain text paragraphs
+  const plain = stripHtml(note.content);
+  const lines = plain.split("\n");
+  let i = 0;
+  while (i < lines.length) {
+    const trimmed = lines[i].trim();
+    i += 1;
+
+    if (!trimmed) {
+      y += 3;
+      continue;
+    }
+
+    setFontSafe(doc, "DMSans");
+    doc.setFontSize(10.5);
+    doc.setTextColor(...NOTESTEXT);
+
+    const textLines = doc.splitTextToSize(trimmed, w) as string[];
+    const paraH = textLines.length * 5.6 + 4;
+    if (y + paraH > pageBreak() && y > 50) {
+      doc.addPage();
+      y = 26;
+    }
+    for (const tl of textLines) {
+      if (y > pageBreak()) {
+        doc.addPage();
+        y = 26;
+      }
+      doc.text(tl, MARGIN, y);
+      y += 5.6;
+    }
+    y += 4;
+  }
+
+  drawFooter(doc);
+  return doc;
+}

@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 
 export const dynamic = "force-dynamic";
-import { query, rowToCustomer, rowToInvoice, rowToPaymentSettings, rowToQuote } from "@/lib/db";
-import type { CustomerRow, InvoiceRow, PaymentSettingsRow, QuoteRow } from "@/lib/db";
+import { query, rowToCustomer, rowToInvoice, rowToNote, rowToPaymentSettings, rowToQuote } from "@/lib/db";
+import type { CustomerRow, InvoiceRow, NoteRow, PaymentSettingsRow, QuoteRow } from "@/lib/db";
 import { isWeakPasscode, rateLimit, clientKey } from "@/lib/rate-limit";
 
 type ShareRow = { doc_type: string; doc_id: string };
@@ -33,6 +33,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ tok
 
   const body = (await request.json()) as { passcode?: string };
   const passcode = String(body.passcode ?? "").trim().toLowerCase();
+
+  if (share.doc_type === "note") {
+    const rows = await query<NoteRow>`SELECT * FROM notes WHERE id = ${share.doc_id}`;
+    const note = rows[0];
+    if (!note) return NextResponse.json({ error: "Note not found" }, { status: 404 });
+    return NextResponse.json({ docType: "note", doc: rowToNote(note) });
+  }
 
   if (share.doc_type === "invoice") {
     const rows = await query<InvoiceRow>`SELECT * FROM invoices WHERE id = ${share.doc_id}`;

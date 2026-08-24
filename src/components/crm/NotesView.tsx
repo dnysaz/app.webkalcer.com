@@ -4,8 +4,12 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowLeft,
   Bold,
+  ChevronDown,
   FileDown,
+  FileText,
+  FileImage,
   Italic,
+  Link2,
   List,
   ListOrdered,
   Plus,
@@ -20,6 +24,7 @@ import {
 import { CrmShell } from "@/components/CrmShell";
 import { useCrm } from "@/components/CrmProvider";
 import { ConfirmModal } from "@/components/crm/ConfirmModal";
+import { NoteShareModal } from "@/components/crm/NoteShareModal";
 import type { Note } from "@/lib/crm";
 import { formatDate, uid } from "@/lib/crm";
 
@@ -77,6 +82,8 @@ export function NotesView() {
   const [editor, setEditor] = useState<NoteDraft | null>(null);
   const [draftSaved, setDraftSaved] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; title: string } | null>(null);
+  const [shareNote, setShareNote] = useState<{ id: string; title: string } | null>(null);
+  const [saveMenuOpen, setSaveMenuOpen] = useState(false);
   const [toast, setToast] = useState("");
   const [search, setSearch] = useState("");
   const savedTimer = useRef<number | null>(null);
@@ -208,7 +215,66 @@ export function NotesView() {
     link.click();
     link.remove();
     URL.revokeObjectURL(url);
+    setSaveMenuOpen(false);
     announce("Saved as .txt");
+  }
+
+  async function downloadPdf() {
+    if (!editor) return;
+    const { buildNotePdf, downloadPdf } = await import("@/lib/pdf");
+    const doc = await buildNotePdf({
+      title: editor.title || "Untitled note",
+      content: editor.content,
+      updatedAt: new Date().toISOString(),
+    });
+    downloadPdf(doc, `${editor.title.trim() || "Untitled note"}.pdf`);
+    setSaveMenuOpen(false);
+    announce("Saved as PDF");
+  }
+
+  async function downloadWord() {
+    if (!editor) return;
+    const { buildArticleDocxBlob } = await import("@/lib/docx");
+    const blob = await buildArticleDocxBlob({
+      title: editor.title || "Untitled note",
+      content: toPlainText(editor.content) || " ",
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${editor.title.trim() || "Untitled note"}.docx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    URL.revokeObjectURL(url);
+    setSaveMenuOpen(false);
+    announce("Saved as Word");
+  }
+
+  function handleShare() {
+    if (!editor) return;
+    // Save the note first so it exists in the DB before sharing
+    const title = editor.title.trim();
+    const content = editor.content.trim();
+    if (!title && !toPlainText(content)) {
+      announce("Write something before sharing");
+      return;
+    }
+    const now = new Date().toISOString();
+    const finalTitle = title || "Untitled note";
+    let noteId = editor.id;
+    if (editor.id) {
+      const existing = notes.find((n) => n.id === editor.id);
+      if (existing) {
+        updateNote({ ...existing, title: finalTitle, content, updatedAt: now });
+      }
+    } else {
+      noteId = uid();
+      addNote({ id: noteId, title: finalTitle, content, createdAt: now, updatedAt: now });
+    }
+    clearDraft();
+    setEditor({ id: noteId, title: finalTitle, content });
+    setShareNote({ id: noteId!, title: finalTitle });
   }
 
   // Save to the database, then go back to the grid.
@@ -277,7 +343,22 @@ export function NotesView() {
             </div>
             <div className="flex items-center gap-2">
               <button onClick={handleNewNote} className="flex items-center gap-1.5 rounded-lg border border-(--crm-border) bg-(--crm-surface) px-3 py-1.5 text-xs font-semibold text-(--crm-secondary) transition-colors hover:bg-(--crm-hover)" title="Save current & new note"><Plus size={14} />New Note</button>
-              <button onClick={downloadTxt} className="flex items-center gap-1.5 rounded-lg border border-(--crm-border) bg-(--crm-surface) px-3 py-1.5 text-xs font-semibold text-(--crm-secondary) transition-colors hover:bg-(--crm-hover)" title="Save as .txt"><FileDown size={14} />Save .txt</button>
+              {editor.id && (
+                <button onClick={handleShare} className="flex items-center gap-1.5 rounded-lg border border-(--crm-border) bg-(--crm-surface) px-3 py-1.5 text-xs font-semibold text-(--crm-secondary) transition-colors hover:bg-(--crm-hover)" title="Share note"><Link2 size={14} />Share</button>
+              )}
+              <div className="relative">
+                <button onClick={() => setSaveMenuOpen(!saveMenuOpen)} className="flex items-center gap-1.5 rounded-lg border border-(--crm-border) bg-(--crm-surface) px-3 py-1.5 text-xs font-semibold text-(--crm-secondary) transition-colors hover:bg-(--crm-hover)" title="Save as"><FileDown size={14} />Save <ChevronDown size={12} /></button>
+                {saveMenuOpen && (
+                  <>
+                    <div className="fixed inset-0 z-[55]" onClick={() => setSaveMenuOpen(false)} />
+                    <div className="absolute right-0 top-full z-[56] mt-1 w-44 rounded-xl border border-(--crm-border) bg-(--crm-panel) py-1 shadow-xl">
+                      <button onClick={downloadWord} className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-(--crm-fg) hover:bg-(--crm-hover)"><FileText size={14} />Save as Word</button>
+                      <button onClick={downloadPdf} className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-(--crm-fg) hover:bg-(--crm-hover)"><FileImage size={14} />Save as PDF</button>
+                      <button onClick={downloadTxt} className="flex w-full items-center gap-2 px-3 py-2 text-xs font-medium text-(--crm-fg) hover:bg-(--crm-hover)"><FileDown size={14} />Save as TXT</button>
+                    </div>
+                  </>
+                )}
+              </div>
               <button onClick={handleBack} className="flex items-center gap-1.5 rounded-lg bg-(--crm-primary) px-3.5 py-1.5 text-xs font-semibold text-white shadow-sm transition-all hover:bg-(--crm-dark)"><ArrowLeft size={14} />Back</button>
             </div>
           </div>
@@ -313,6 +394,13 @@ export function NotesView() {
           </div>
         </div>
         {confirmModal}
+        {shareNote && (
+          <NoteShareModal
+            noteId={shareNote.id}
+            noteTitle={shareNote.title}
+            onClose={() => setShareNote(null)}
+          />
+        )}
         {toast && <div className="fixed bottom-5 left-1/2 z-[60] -translate-x-1/2 rounded-xl bg-(--crm-dark) px-4 py-3 text-xs font-semibold text-white shadow-xl">{toast}</div>}
       </CrmShell>
     );

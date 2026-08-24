@@ -13,8 +13,8 @@ export async function POST(request: Request) {
   if (!(await requireAuth())) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   try {
     const body = (await request.json()) as { docType?: string; docId?: string };
-    if (body.docType !== "invoice" && body.docType !== "quote") {
-      return NextResponse.json({ error: "docType must be invoice or quote" }, { status: 400 });
+    if (body.docType !== "invoice" && body.docType !== "quote" && body.docType !== "note") {
+      return NextResponse.json({ error: "docType must be invoice, quote, or note" }, { status: 400 });
     }
     if (!body.docId) {
       return NextResponse.json({ error: "docId is required" }, { status: 400 });
