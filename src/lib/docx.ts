@@ -187,3 +187,129 @@ export async function buildArticleDocxBlob(info: { title: string; content: strin
   });
   return Packer.toBlob(doc);
 }
+
+// ---- Note Word (clean white page, HTML-based, no header/footer) ----
+
+/** Collect inline text runs from an HTML element, preserving B/I/U. */
+function collectRunsFromHtml(node: ChildNode): { text: string; bold: boolean; italic: boolean; underline: boolean }[] {
+  if (node.nodeType === 3) {
+    const t = node.textContent || "";
+    return t ? [{ text: t, bold: false, italic: false, underline: false }] : [];
+  }
+  if (node.nodeType !== 1) return [];
+  const el = node as HTMLElement;
+  const tag = el.tagName.toLowerCase();
+  const isBold = tag === "b" || tag === "strong";
+  const isItalic = tag === "i" || tag === "em";
+  const isUnderline = tag === "u";
+  const runs: { text: string; bold: boolean; italic: boolean; underline: boolean }[] = [];
+  for (const child of el.childNodes) {
+    for (const r of collectRunsFromHtml(child)) {
+      runs.push({
+        text: r.text,
+        bold: r.bold || isBold,
+        italic: r.italic || isItalic,
+        underline: r.underline || isUnderline,
+      });
+    }
+  }
+  return runs;
+}
+
+/** Convert collected runs into docx TextRun children. */
+function runsToTextRuns(runs: { text: string; bold: boolean; italic: boolean; underline: boolean }[]): TextRun[] {
+  return runs.map((r) =>
+    new TextRun({
+      text: r.text,
+      ...(r.bold ? { bold: true } : {}),
+      ...(r.italic ? { italics: true } : {}),
+      ...(r.underline ? { underline: {} } : {}),
+    }),
+  );
+}
+
+/**
+ * Builds a clean note Word document — white page with just the title and
+ * formatted content. No header, no footer. Preserves bold, italic, underline
+ * and lists from the HTML content.
+ */
+export async function buildNoteDocxBlob(info: { title: string; content: string }): Promise<Blob> {
+  const parsed = new DOMParser().parseFromString(info.content || "<div></div>", "text/html");
+  const body = parsed.body;
+  const children: Paragraph[] = [];
+
+  // Title paragraph
+  children.push(
+    new Paragraph({
+      children: [new TextRun({ text: info.title || "Untitled note", bold: true, size: 40, font: "Calibri" })],
+      spacing: { after: 200 },
+    }),
+  );
+
+  // Content blocks
+  for (const child of Array.from(body.childNodes)) {
+    if (child.nodeType === 3) {
+      const text = (child.textContent || "").trim();
+      if (!text) continue;
+      children.push(
+        new Paragraph({
+          children: [new TextRun({ text, size: 22, font: "Calibri" })],
+          spacing: { after: 120 },
+        }),
+      );
+    } else if (child.nodeType === 1) {
+      const el = child as HTMLElement;
+      const tag = el.tagName.toLowerCase();
+
+      if (tag === "ul") {
+        const items = el.querySelectorAll(":scope > li");
+        items.forEach((li) => {
+          children.push(
+            new Paragraph({
+              children: runsToTextRuns(collectRunsFromHtml(li)),
+              bullet: { level: 0 },
+              spacing: { after: 60 },
+            }),
+          );
+        });
+      } else if (tag === "ol") {
+        const items = el.querySelectorAll(":scope > li");
+        items.forEach((li, idx) => {
+          children.push(
+            new Paragraph({
+              children: [
+                new TextRun({ text: `${idx + 1}. `, size: 22, font: "Calibri" }),
+                ...runsToTextRuns(collectRunsFromHtml(li)),
+              ],
+              spacing: { after: 60 },
+            }),
+          );
+        });
+      } else {
+        // div / p / other block
+        const runs = collectRunsFromHtml(el);
+        if (runs.length) {
+          children.push(
+            new Paragraph({
+              children: runsToTextRuns(runs),
+              spacing: { after: 120 },
+            }),
+          );
+        }
+      }
+    }
+  }
+
+  const doc = new Document({
+    creator: "webkalcerCRM",
+    title: info.title,
+    description: "Note from webkalcerCRM",
+    styles: {
+      default: {
+        document: { run: { font: "Calibri", size: 22 } },
+      },
+    },
+    sections: [{ children }],
+  });
+  return Packer.toBlob(doc);
+}

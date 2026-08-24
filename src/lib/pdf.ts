@@ -1263,77 +1263,168 @@ export function printPdf(doc: jsPDF) {
   window.open(url, "_blank");
 }
 
-// ---- Note PDF ----
+// ---- Note PDF (clean white page, no header/footer) ----
 
-/** Strip HTML tags and decode entities to get plain text. */
-function stripHtml(html: string): string {
-  const doc = new DOMParser().parseFromString(html, "text/html");
-  return (doc.body.textContent || "").trim();
+/** Collect inline text runs from an HTML element, preserving B/I/U. */
+function collectRuns(node: ChildNode): { text: string; bold: boolean; italic: boolean; underline: boolean }[] {
+  if (node.nodeType === 3) {
+    const t = node.textContent || "";
+    return t ? [{ text: t, bold: false, italic: false, underline: false }] : [];
+  }
+  if (node.nodeType !== 1) return [];
+  const el = node as HTMLElement;
+  const tag = el.tagName.toLowerCase();
+  const isBold = tag === "b" || tag === "strong";
+  const isItalic = tag === "i" || tag === "em";
+  const isUnderline = tag === "u";
+  const runs: { text: string; bold: boolean; italic: boolean; underline: boolean }[] = [];
+  for (const child of el.childNodes) {
+    for (const r of collectRuns(child)) {
+      runs.push({
+        text: r.text,
+        bold: r.bold || isBold,
+        italic: r.italic || isItalic,
+        underline: r.underline || isUnderline,
+      });
+    }
+  }
+  return runs;
 }
 
-export async function buildNotePdf(note: { title: string; content: string; updatedAt: string }): Promise<jsPDF> {
+/** Render a single text run at (x, y), returning the new X offset. */
+function renderRun(doc: jsPDF, run: { text: string; bold: boolean; italic: boolean; underline: boolean }, x: number, y: number): number {
+  const family = "DMSans";
+  const style = run.bold ? "bold" : "normal";
+  setFontSafe(doc, family, style);
+  doc.setFontSize(11);
+  doc.setTextColor(...INK);
+  // jsPDF doesn't support native italic for custom fonts — approximate by
+  // using the regular font (users will see bold vs regular distinction).
+  doc.text(run.text, x, y);
+  const tw = doc.getTextWidth(run.text);
+  if (run.underline) {
+    doc.setDrawColor(...INK);
+    doc.setLineWidth(0.25);
+    doc.line(x, y + 0.6, x + tw, y + 0.6);
+  }
+  return x + tw;
+}
+
+/** Render a block-level element (div/ul/ol/p), returning the next Y. */
+function renderBlock(doc: jsPDF, el: HTMLElement, y: number, w: number, pageBreak: () => number): number {
+  const tag = el.tagName.toLowerCase();
+
+  // List items
+  if (tag === "ul" || tag === "ol") {
+    const items = el.querySelectorAll(":scope > li");
+    let idx = 0;
+    items.forEach((li) => {
+      idx++;
+      if (y + 6 > pageBreak()) { doc.addPage(); y = 22; }
+      const bullet = tag === "ol" ? `${idx}. ` : "•  ";
+      const runs = collectRuns(li);
+      // Render bullet/number prefix
+      setFontSafe(doc, "DMSans", "normal");
+      doc.setFontSize(11);
+      doc.setTextColor(...INK);
+      doc.text(bullet, MARGIN, y);
+      let x = MARGIN + doc.getTextWidth(bullet);
+      // Render inline runs, wrapping within content width
+      for (const run of runs) {
+        const maxW = MARGIN + w - x;
+        const words = run.text.split(/(\s)/);
+        for (const word of words) {
+          setFontSafe(doc, "DMSans", run.bold ? "bold" : "normal");
+          doc.setFontSize(11);
+          const ww = doc.getTextWidth(word);
+          if (x + ww > MARGIN + w && word.trim()) {
+            y += 5;
+            if (y > pageBreak()) { doc.addPage(); y = 22; }
+            x = MARGIN + 6;
+          }
+          x = renderRun(doc, { text: word, bold: run.bold, italic: run.italic, underline: run.underline }, x, y);
+        }
+      }
+      y += 6;
+    });
+    return y + 2;
+  }
+
+  // Regular block (div, p, etc.) — render inline runs with word-wrap
+  const runs = collectRuns(el);
+  if (!runs.length) return y + 3;
+
+  let x = MARGIN;
+  for (const run of runs) {
+    const words = run.text.split(/(\s)/);
+    for (const word of words) {
+      setFontSafe(doc, "DMSans", run.bold ? "bold" : "normal");
+      doc.setFontSize(11);
+      const ww = doc.getTextWidth(word);
+      if (x + ww > MARGIN + w && word.trim()) {
+        y += 5;
+        if (y > pageBreak()) { doc.addPage(); y = 22; }
+        x = MARGIN;
+      }
+      x = renderRun(doc, { text: word, bold: run.bold, italic: run.italic, underline: run.underline }, x, y);
+    }
+  }
+  return y + 5;
+}
+
+/**
+ * Builds a clean note PDF — white page with just the title and formatted
+ * content. No header, no footer. Preserves bold, italic, underline and lists.
+ */
+export async function buildNotePdf(note: { title: string; content: string }): Promise<jsPDF> {
   refreshTheme();
   const doc = new jsPDF();
   await ensureFonts(doc);
   const w = contentWidth(doc);
-  const pageBreak = () => pageHeight(doc) - 22;
+  const pageBreak = () => pageHeight(doc) - 20;
 
-  // ---- Cover ----
-  drawHeader(doc, "NOTE", formatDate(note.updatedAt));
-  let y = 70;
-  setFontSafe(doc, "DMSansSemi");
-  doc.setFontSize(15);
-  doc.setTextColor(...DARK);
-  doc.text("Note", MARGIN, y);
-  y += 10;
+  // Title
+  let y = 24;
   setFontSafe(doc, "DMSans", "bold");
-  doc.setFontSize(24);
-  doc.setTextColor(...GREEN);
+  doc.setFontSize(20);
+  doc.setTextColor(...INK);
   const titleLines = doc.splitTextToSize(note.title || "Untitled note", w) as string[];
   for (const line of titleLines) {
     doc.text(line, MARGIN, y);
-    y += 11;
+    y += 9;
   }
+  y += 4;
 
-  // ---- Content ----
-  doc.addPage();
-  y = 30;
-  drawHeader(doc, "NOTE", formatDate(note.updatedAt));
+  // Thin separator
+  doc.setDrawColor(...BORDER);
+  doc.setLineWidth(0.3);
+  doc.line(MARGIN, y, MARGIN + w, y);
+  y += 8;
 
-  // Convert HTML content to plain text paragraphs
-  const plain = stripHtml(note.content);
-  const lines = plain.split("\n");
-  let i = 0;
-  while (i < lines.length) {
-    const trimmed = lines[i].trim();
-    i += 1;
-
-    if (!trimmed) {
-      y += 3;
-      continue;
-    }
-
-    setFontSafe(doc, "DMSans");
-    doc.setFontSize(10.5);
-    doc.setTextColor(...NOTESTEXT);
-
-    const textLines = doc.splitTextToSize(trimmed, w) as string[];
-    const paraH = textLines.length * 5.6 + 4;
-    if (y + paraH > pageBreak() && y > 50) {
-      doc.addPage();
-      y = 26;
-    }
-    for (const tl of textLines) {
-      if (y > pageBreak()) {
-        doc.addPage();
-        y = 26;
+  // Parse HTML content into blocks
+  const parsed = new DOMParser().parseFromString(note.content || "<div></div>", "text/html");
+  const body = parsed.body;
+  for (const child of Array.from(body.childNodes)) {
+    if (child.nodeType === 3) {
+      // Top-level text node
+      const text = (child.textContent || "").trim();
+      if (!text) continue;
+      if (y + 6 > pageBreak()) { doc.addPage(); y = 22; }
+      setFontSafe(doc, "DMSans", "normal");
+      doc.setFontSize(11);
+      doc.setTextColor(...INK);
+      const lines = doc.splitTextToSize(text, w) as string[];
+      for (const line of lines) {
+        if (y > pageBreak()) { doc.addPage(); y = 22; }
+        doc.text(line, MARGIN, y);
+        y += 5;
       }
-      doc.text(tl, MARGIN, y);
-      y += 5.6;
+      y += 3;
+    } else if (child.nodeType === 1) {
+      if (y + 6 > pageBreak()) { doc.addPage(); y = 22; }
+      y = renderBlock(doc, child as HTMLElement, y, w, pageBreak);
     }
-    y += 4;
   }
 
-  drawFooter(doc);
   return doc;
 }

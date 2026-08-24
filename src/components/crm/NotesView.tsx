@@ -225,7 +225,6 @@ export function NotesView() {
     const doc = await buildNotePdf({
       title: editor.title || "Untitled note",
       content: editor.content,
-      updatedAt: new Date().toISOString(),
     });
     downloadPdf(doc, `${editor.title.trim() || "Untitled note"}.pdf`);
     setSaveMenuOpen(false);
@@ -234,10 +233,10 @@ export function NotesView() {
 
   async function downloadWord() {
     if (!editor) return;
-    const { buildArticleDocxBlob } = await import("@/lib/docx");
-    const blob = await buildArticleDocxBlob({
+    const { buildNoteDocxBlob } = await import("@/lib/docx");
+    const blob = await buildNoteDocxBlob({
       title: editor.title || "Untitled note",
-      content: toPlainText(editor.content) || " ",
+      content: editor.content,
     });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
