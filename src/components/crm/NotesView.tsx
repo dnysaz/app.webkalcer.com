@@ -31,6 +31,7 @@ import type { Note } from "@/lib/crm";
 import { formatDate, uid } from "@/lib/crm";
 
 const DRAFT_KEY = "webkalcer:notes:draft";
+const FS_KEY = "webkalcer:notes:fullscreen";
 
 type NoteDraft = {
   id: string | null;
@@ -86,7 +87,9 @@ export function NotesView() {
   const [confirmDelete, setConfirmDelete] = useState<{ id: string; title: string } | null>(null);
   const [shareNote, setShareNote] = useState<{ id: string; title: string } | null>(null);
   const [saveMenuOpen, setSaveMenuOpen] = useState(false);
-  const [fullscreen, setFullscreen] = useState(false);
+  const [fullscreen, setFullscreen] = useState(() => {
+    try { return localStorage.getItem(FS_KEY) === "1"; } catch { return false; }
+  });
   const [toast, setToast] = useState("");
   const [search, setSearch] = useState("");
   const savedTimer = useRef<number | null>(null);
@@ -138,6 +141,11 @@ export function NotesView() {
     }
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
+  }, [fullscreen]);
+
+  // Persist fullscreen state to localStorage
+  useEffect(() => {
+    try { localStorage.setItem(FS_KEY, fullscreen ? "1" : "0"); } catch {}
   }, [fullscreen]);
 
   const sortedNotes = useMemo(
@@ -350,9 +358,10 @@ export function NotesView() {
             <div className={fsSep} />
             <button onMouseDown={(e) => e.preventDefault()} onClick={() => exec("undo")} className={fsToolbarBtn} title="Undo"><Undo2 size={17} /></button>
             <button onMouseDown={(e) => e.preventDefault()} onClick={() => exec("redo")} className={fsToolbarBtn} title="Redo"><Redo2 size={17} /></button>
-            {/* Spacer pushes exit to bottom */}
+            {/* Spacer pushes actions to bottom */}
             <div className="flex-1" />
             <div className={fsSep} />
+            <button onClick={handleNewNote} className={fsToolbarBtn} title="New note"><Plus size={17} /></button>
             <button onClick={() => setFullscreen(false)} className={fsToolbarBtn} title="Exit fullscreen (Esc)"><Minimize2 size={17} /></button>
           </div>
 
